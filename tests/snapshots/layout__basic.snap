@@ -1,0 +1,42 @@
+---
+source: tests/layout.rs
+expression: "render(name, 60).join(\"\\n\")"
+---
+ Basic document 
+
+A paragraph with emphasis, strong, struck text and
+ inline code . It also has a link (https://example.com/docs)
+and an autolink https://example.com, plus a footnote[note].
+
+Line one with a hard break
+line two after the break.
+
+
+Second level
+────────────
+
+▣ Diagram of the pipeline (images/pipeline.png)
+
+### Third level
+
+#### Fourth level
+
+##### Fifth level
+
+###### Sixth level
+
+────────────────────────────────────────────────────────────
+
+Some <span class="x">inline html</span> and a very long
+word:
+Pneumonoultramicroscopicsilicovolcanoconiosisisaverylongword
+indeed.
+
+<div align="center">
+<b>raw block html</b>
+</div>
+
+────────────────────────────────────────────────────────────
+
+[note] The footnote text, which is long enough that it wraps
+       when the width is narrow enough to force it.

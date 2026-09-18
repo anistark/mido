@@ -1,0 +1,22 @@
+pub const KEYS: &[(&str, &str)] = &[
+    ("j / k, ↓ / ↑, wheel", "Scroll one line"),
+    ("Ctrl-d / Ctrl-u", "Half page down / up"),
+    ("Ctrl-f / Ctrl-b, Space", "Page down / up"),
+    ("g / G", "Top / bottom"),
+    ("b", "Toggle the outline panel"),
+    ("Tab / Shift-Tab", "Cycle focus between the panes"),
+    ("Tab then ← / →", "Move focus in that direction"),
+    ("h / l", "Focus the outline / the document"),
+    ("j / k in the outline", "Move and follow, Enter returns"),
+    (
+        "Space, h / l in the outline",
+        "Fold, collapse / expand a section",
+    ),
+    ("- / = in the outline", "Fold all / unfold all"),
+    ("/", "Search, Enter to keep, Esc to cancel"),
+    ("n / N", "Next / previous match"),
+    ("t", "Table of contents"),
+    ("r", "Reload the file"),
+    ("?", "This help"),
+    ("q", "Quit"),
+];

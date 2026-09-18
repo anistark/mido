@@ -1,0 +1,17 @@
+---
+source: tests/layout.rs
+expression: "render(name, 60).join(\"\\n\")"
+---
+▎ fn main() {                                           rust
+▎     println!("hello, {}", "world");                       
+▎ }                                                         
+
+▎ no language here                                          
+
+▎ plain text fallback                            unknownlang
+
+▎ indented code block                                       
+
+▎ const aVeryLongLineThatShouldBeClippedAtTheRightEdgeOfThe…
+
+▎                                                     python

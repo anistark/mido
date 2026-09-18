@@ -1,0 +1,17 @@
+---
+source: tests/layout.rs
+expression: "render(name, 60).join(\"\\n\")"
+---
+┌────────────────┬────────┬─────────────────────────┐
+│ Name           │  Role  │                   Notes │
+┝━━━━━━━━━━━━━━━━┿━━━━━━━━┿━━━━━━━━━━━━━━━━━━━━━━━━━┥
+│ ratatui        │  TUI   │            The standard │
+│ pulldown-cmark │ parser │ Fast, gives byte ranges │
+└────────────────┴────────┴─────────────────────────┘
+
+┌─────────────────────────────────────────────────┬────────┐
+│ Column with a long header that forces wrapping  │ b      │
+┝━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┿━━━━━━━━┥
+│ a cell containing a long run of words that has  │  code  │
+│ to wrap across several lines in a narrow column │        │
+└─────────────────────────────────────────────────┴────────┘
