@@ -1,0 +1,16 @@
+---
+source: src/render/mermaid/mod.rs
+expression: "plain(\"flowchart LR\\n  In --> Parse --> Layout\\n  Layout --> Paint & Print\\n  Parse -.-> Cache\\n\")"
+---
+                                        ┌───────┐
+                                        │ Paint │
+                                     ┌─►└───────┘
+                         ┌────────┐──┘
+                         │ Layout │
+                      ┌─►└────────┘──┐
+┌────┐      ┌───────┐─┘              └─►┌───────┐
+│ In │─────►│ Parse │                   │ Print │
+└────┘      └───────┘┄┄┐                └───────┘
+                       └┄►┌───────┐
+                          │ Cache │
+                          └───────┘

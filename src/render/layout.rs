@@ -2,6 +2,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use unicode_width::UnicodeWidthChar;
 
+use super::mermaid::{self, Kind};
 use super::syntax;
 use super::theme::{ColorMode, Theme};
 use super::wrap::{LinkSpan, Piece, Wrapped, width, wrap};
@@ -311,6 +312,13 @@ impl Renderer<'_> {
     fn code_block(&mut self, lang: Option<&str>, code: &str) {
         let code = code.replace('\t', "    ");
         let inner = self.avail().saturating_sub(2).max(1);
+        if lang == Some("mermaid")
+            && let Some(drawing) = mermaid::render(&code, inner.saturating_sub(8))
+            && drawing.width() + 8 <= inner
+        {
+            self.diagram(&drawing, inner);
+            return;
+        }
         let block_style = self.theme.code_block();
         let mut lines = lang
             .and_then(|l| syntax::highlight(l, &code, self.theme))
@@ -348,6 +356,42 @@ impl Renderer<'_> {
                 if pad > 0 {
                     row.push(Span::styled(" ".repeat(pad), block_style));
                 }
+            }
+            self.emit(row);
+        }
+    }
+
+    fn diagram(&mut self, drawing: &mermaid::Drawing, inner: usize) {
+        let bg = self.theme.code_bg;
+        let block_style = self.theme.code_block();
+        let style = |kind: Kind| match kind {
+            Kind::Text => self.theme.text().bg(bg),
+            Kind::Border => self.theme.muted().bg(bg),
+            Kind::Edge => Style::new().fg(self.theme.accent).bg(bg),
+        };
+        let rows: Vec<Vec<Span<'static>>> = std::iter::once(Vec::new())
+            .chain(drawing.rows.iter().map(|runs| {
+                runs.iter()
+                    .map(|(kind, text)| Span::styled(text.clone(), style(*kind)))
+                    .collect()
+            }))
+            .chain(std::iter::once(Vec::new()))
+            .collect();
+        for (i, spans) in rows.into_iter().enumerate() {
+            let used: usize = spans.iter().map(|s| width(&s.content)).sum();
+            let mut row = vec![
+                Span::styled("▎ ", self.theme.code_border()),
+                Span::styled(" ", block_style),
+            ];
+            row.extend(spans);
+            let mut pad = inner.saturating_sub(used + 1);
+            if i == 0 && pad >= 9 {
+                row.push(Span::styled(" ".repeat(pad - 7), block_style));
+                row.push(Span::styled("mermaid", self.theme.faint().bg(bg)));
+                pad = 0;
+            }
+            if pad > 0 {
+                row.push(Span::styled(" ".repeat(pad), block_style));
             }
             self.emit(row);
         }
@@ -499,18 +543,20 @@ impl Renderer<'_> {
         band: Option<Style>,
     ) {
         let border = self.theme.table_border();
-        let wrapped: Vec<Vec<Vec<Span<'static>>>> = cells
+        let wrapped: Vec<Vec<Wrapped>> = cells
             .iter()
             .zip(widths)
-            .map(|(cell, w)| wrap(cell, *w).into_iter().map(|l| l.spans).collect())
+            .map(|(cell, w)| wrap(cell, *w))
             .collect();
         let height = wrapped.iter().map(Vec::len).max().unwrap_or(0).max(1);
         for i in 0..height {
             let mut spans = vec![Span::styled("│", border)];
+            let mut links: Vec<LinkSpan> = Vec::new();
+            let mut col = 1;
             for (c, w) in widths.iter().enumerate() {
                 let line = wrapped[c].get(i);
                 let used = line
-                    .map(|l| l.iter().map(|s| width(&s.content)).sum())
+                    .map(|l| l.spans.iter().map(|s| width(&s.content)).sum())
                     .unwrap_or(0);
                 let pad = w.saturating_sub(used);
                 let (left, right) = match aligns.get(c).copied().unwrap_or_default() {
@@ -519,18 +565,27 @@ impl Renderer<'_> {
                     Alignment::Center => (pad / 2, pad - pad / 2),
                 };
                 spans.push(Span::raw(" ".repeat(left + 1)));
+                col += left + 1;
                 if let Some(line) = line {
-                    spans.extend(line.iter().cloned());
+                    spans.extend(line.spans.iter().cloned());
+                    links.extend(line.links.iter().map(|l| LinkSpan {
+                        start: l.start + col,
+                        end: l.end + col,
+                        url: l.url.clone(),
+                    }));
                 }
+                col += used;
                 spans.push(Span::raw(" ".repeat(right + 1)));
+                col += right + 1;
                 spans.push(Span::styled("│", border));
+                col += 1;
             }
             if let Some(band) = band {
                 for span in spans.iter_mut() {
                     span.style = span.style.patch(band);
                 }
             }
-            self.emit(spans);
+            self.emit_with(spans, links);
         }
     }
 

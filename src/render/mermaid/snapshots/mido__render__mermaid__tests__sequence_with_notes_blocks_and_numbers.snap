@@ -1,0 +1,25 @@
+---
+source: src/render/mermaid/mod.rs
+expression: "plain(\"sequenceDiagram\\n  autonumber\\n  participant A as Alice\\n  participant B as Bob\\n  A->>B: Hello Bob, how are you?\\n  Note right of B: Bob thinks\\n  loop every minute\\n    B-->>A: Great!\\n    A-xB: Ping\\n  end\\n  Note over A,B: The end\\n\")"
+---
+┌───────┐                      ┌─────┐
+│ Alice │                      │ Bob │
+└───┬───┘                      └──┬──┘
+    │                             │
+    │─1. Hello Bob, how are you?─>│
+    │                             │
+    │                             │ ┌────────────┐
+    │                             │ │ Bob thinks │
+    │                             │ └────────────┘
+    │                             │
+  ┌─[loop] every minute───────────┼─┐
+  │ │<┄2. Great!┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄│ │
+  │ │                             │ │
+  │ │─3. Ping────────────────────x│ │
+  │ │                             │ │
+  └─┼─────────────────────────────┼─┘
+    │                             │
+  ┌────────────────────────────────┐
+  │            The end             │
+  └────────────────────────────────┘
+    │                             │

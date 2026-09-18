@@ -1,0 +1,35 @@
+---
+source: src/render/mermaid/mod.rs
+expression: "plain(\"graph TD\\n  A[Start] --> B{Ready?}\\n  B -->|yes| C(Go)\\n  B -->|no| D[Wait]\\n  D --> B\\n  C --> E((Done))\\n\")"
+---
+       ┌───────┐
+       │ Start │
+       └───────┘
+           │
+           │
+           │
+           │
+           ▼
+      ┌────────┐
+      < Ready? >◄───────┐
+      └────────┘        │
+    ┌──┘  └─────┐       │
+    │           │       │
+   yes         no       │
+    │           │       │
+    │           │       │
+    │           │       │
+    │           │       │
+    │           │       │
+    ▼           ▼       │
+ ╭────╮        ┌──────┐ │
+ │ Go │        │ Wait │─┘
+ ╰────╯        └──────┘
+    │
+    │
+    │
+    │
+    ▼
+╭──────╮
+│ Done │
+╰──────╯

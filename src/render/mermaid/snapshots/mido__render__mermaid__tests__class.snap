@@ -1,0 +1,18 @@
+---
+source: src/render/mermaid/mod.rs
+expression: "plain(\"classDiagram\\n  class Animal {\\n    +String name\\n    +speak()\\n  }\\n  Animal <|-- Dog\\n\")"
+---
+┌──────────────┐
+│    Animal    │
+├──────────────┤
+│ +String name │
+├──────────────┤
+│ +speak()     │
+└──────────────┘
+        △
+        │
+        │
+        │
+     ┌─────┐
+     │ Dog │
+     └─────┘

@@ -1,0 +1,26 @@
+---
+source: src/render/mermaid/mod.rs
+expression: "plain(\"stateDiagram-v2\\n  [*] --> Idle\\n  Idle --> Running : start\\n  Running --> [*]\\n\")"
+---
+     ●
+
+     │
+     │
+     ▼
+ ╭──────╮
+ │ Idle │
+ ╰──────╯
+     │
+   start
+     │
+     │
+     │
+     ▼
+╭─────────╮
+│ Running │
+╰─────────╯
+     │
+     │
+     ▼
+
+     ◉

@@ -91,3 +91,55 @@ fn links_and_anchors_are_indexed() {
     );
     assert_eq!(out.line_for_anchor("nope"), None);
 }
+
+#[test]
+fn links_inside_table_cells_are_indexed() {
+    let md = "| Name | Where |\n|---|---|\n| mido | see the [docs](guide/docs.md) |\n";
+    let out = layout(&parse(md), &Theme::dark(), 60);
+    let link = out
+        .links
+        .iter()
+        .find(|l| l.url == "guide/docs.md")
+        .expect("table link indexed");
+    let row = &out.plain_lines()[link.line];
+    let text: String = row
+        .chars()
+        .scan(0usize, |col, c| {
+            let start = *col;
+            *col += unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
+            Some((start, c))
+        })
+        .filter(|(col, _)| (link.start as usize..link.end as usize).contains(col))
+        .map(|(_, c)| c)
+        .collect();
+    assert!(
+        text.starts_with("docs"),
+        "link columns should cover the link text: {text:?} in {row:?}"
+    );
+    assert!(out.link_at(link.line, link.start).is_some());
+}
+
+#[test]
+fn mermaid_blocks_become_diagrams_or_fall_back() {
+    let md = "```mermaid\ngraph LR\n  A[Read] --> B[Render]\n```\n\n```mermaid\nzzzDiagram\n  a -> b\n```\n";
+    let out = layout(&parse(md), &Theme::dark(), 80);
+    let text = out.plain_lines().join("\n");
+    assert!(
+        text.contains("┌") && (text.contains("►") || text.contains("▶")),
+        "flowchart should be drawn:\n{text}"
+    );
+    assert!(
+        !text.contains("A[Read]"),
+        "drawn diagrams do not show their source:\n{text}"
+    );
+    assert!(
+        text.contains("zzzDiagram"),
+        "unsupported diagrams keep their source:\n{text}"
+    );
+    let narrow = layout(&parse(md), &Theme::dark(), 24);
+    let narrow_text = narrow.plain_lines().join("\n");
+    assert!(
+        narrow_text.contains("A[Read]"),
+        "too-wide drawings fall back to source:\n{narrow_text}"
+    );
+}

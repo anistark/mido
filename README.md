@@ -66,6 +66,7 @@ On terminals wide enough an outline of the headings sits in a tinted card at the
 - Blockquotes, nested as deep as you like
 - Fenced code with syntax highlighting for the languages bat ships
 - GFM tables with alignment and wrapped cells
+- Mermaid diagrams drawn with box characters: flowcharts, sequence, class and state diagrams, plus pie, gantt, mindmap, timeline, git graphs and more
 
 > Anything mido cannot render, such as raw HTML, is shown as source rather than dropped.
 

@@ -8,13 +8,14 @@ All notable changes to mido are recorded here. The format follows [Keep a Change
 
 - Project mode: `mido <folder>` and bare `mido` open a folder, honouring `.gitignore` and skipping hidden files, starting on README.md, then index.md, then the first file.
 - Files sidebar: a flat panel on the left headed by the opened folder's name, the tree hanging from it, folders first, foldable, the open file highlighted, and `T` to show first headings instead of names.
-- Link following: `]` and `[` select links, Enter or a click follows them. Relative links open in place, `#anchors` jump to headings using GitHub slugs, folders open their README, and web links open in the browser.
+- Link following: `]` and `[` select links, including links inside table cells, and Enter or a click follows them. Relative links open in place, `#anchors` jump to headings using GitHub slugs, folders open their README, and web links open in the browser.
 - History: `H` and `L` move back and forward through visited pages and positions.
 - Fuzzy file finder on `Ctrl-p`, matching paths and first headings.
 - Focus mode on `f`: hides both panels for a full-width document and restores them on a second press.
 - `E` opens the file in `$VISUAL` or `$EDITOR` and reloads it afterwards.
 - In a folder the whole tree is watched, so added and removed files appear in the files panel with folds preserved.
 - Panels show only while the document keeps 60 columns, so narrow terminals stay readable.
+- Mermaid code blocks render as text diagrams: flowcharts, sequence, class and state diagrams through mmdflux, and pie, gantt, mindmap, timeline, git graphs and other types through mermaid-text. Unsupported or too-wide diagrams keep their labelled source.
 
 ### Changed
 
