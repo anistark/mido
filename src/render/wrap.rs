@@ -8,6 +8,7 @@ pub enum Piece {
         text: String,
         style: Style,
         atomic: bool,
+        link: Option<String>,
     },
     Break,
 }
@@ -18,6 +19,7 @@ impl Piece {
             text: text.into(),
             style,
             atomic: false,
+            link: None,
         }
     }
 
@@ -26,19 +28,41 @@ impl Piece {
             text: text.into(),
             style,
             atomic: true,
+            link: None,
         }
     }
+
+    pub fn linked(mut self, url: Option<&str>) -> Self {
+        if let Piece::Text { link, .. } = &mut self {
+            *link = url.map(str::to_string);
+        }
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Wrapped {
+    pub spans: Vec<Span<'static>>,
+    pub links: Vec<LinkSpan>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkSpan {
+    pub start: usize,
+    pub end: usize,
+    pub url: String,
 }
 
 pub fn width(s: &str) -> usize {
     UnicodeWidthStr::width(s)
 }
 
-pub fn wrap(pieces: &[Piece], width: usize) -> Vec<Vec<Span<'static>>> {
+pub fn wrap(pieces: &[Piece], width: usize) -> Vec<Wrapped> {
     let mut w = Wrapper {
         width: width.max(1),
         lines: Vec::new(),
         cur: Vec::new(),
+        cur_links: Vec::new(),
         cur_width: 0,
         word: Vec::new(),
     };
@@ -52,18 +76,20 @@ pub fn wrap(pieces: &[Piece], width: usize) -> Vec<Vec<Span<'static>>> {
                 text,
                 style,
                 atomic: true,
-            } => w.word.push((text.clone(), *style)),
+                link,
+            } => w.word.push((text.clone(), *style, link.clone())),
             Piece::Text {
                 text,
                 style,
                 atomic: false,
+                link,
             } => {
                 for token in tokens(text) {
                     if token.starts_with(' ') {
                         w.end_word();
-                        w.space(token, *style);
+                        w.space(token, *style, link.as_deref());
                     } else {
-                        w.word.push((token.to_string(), *style));
+                        w.word.push((token.to_string(), *style, link.clone()));
                     }
                 }
             }
@@ -94,10 +120,11 @@ fn tokens(text: &str) -> impl Iterator<Item = &str> {
 
 struct Wrapper {
     width: usize,
-    lines: Vec<Vec<Span<'static>>>,
+    lines: Vec<Wrapped>,
     cur: Vec<Span<'static>>,
+    cur_links: Vec<LinkSpan>,
     cur_width: usize,
-    word: Vec<(String, Style)>,
+    word: Vec<(String, Style, Option<String>)>,
 }
 
 impl Wrapper {
@@ -109,6 +136,7 @@ impl Wrapper {
         {
             self.cur.pop();
         }
+        let final_width: usize = self.cur.iter().map(|s| width(&s.content)).sum();
         let mut merged: Vec<Span<'static>> = Vec::with_capacity(self.cur.len());
         for span in self.cur.drain(..) {
             match merged.last_mut() {
@@ -118,18 +146,40 @@ impl Wrapper {
                 _ => merged.push(span),
             }
         }
-        self.lines.push(merged);
+        let links = self
+            .cur_links
+            .drain(..)
+            .filter_map(|mut l| {
+                l.end = l.end.min(final_width);
+                (l.end > l.start).then_some(l)
+            })
+            .collect();
+        self.lines.push(Wrapped {
+            spans: merged,
+            links,
+        });
         self.cur_width = 0;
     }
 
-    fn push(&mut self, text: &str, style: Style) {
+    fn push(&mut self, text: &str, style: Style, link: Option<&str>) {
+        let start = self.cur_width;
         self.cur_width += width(text);
         self.cur.push(Span::styled(text.to_string(), style));
+        if let Some(url) = link {
+            match self.cur_links.last_mut() {
+                Some(last) if last.url == url && last.end == start => last.end = self.cur_width,
+                _ => self.cur_links.push(LinkSpan {
+                    start,
+                    end: self.cur_width,
+                    url: url.to_string(),
+                }),
+            }
+        }
     }
 
-    fn space(&mut self, text: &str, style: Style) {
+    fn space(&mut self, text: &str, style: Style, link: Option<&str>) {
         if self.cur_width > 0 {
-            self.push(text, style);
+            self.push(text, style, link);
         }
     }
 
@@ -138,17 +188,17 @@ impl Wrapper {
             return;
         }
         let word = std::mem::take(&mut self.word);
-        let total: usize = word.iter().map(|(t, _)| width(t)).sum();
+        let total: usize = word.iter().map(|(t, _, _)| width(t)).sum();
         if self.cur_width > 0 && self.cur_width + total > self.width {
             self.flush();
         }
         if total <= self.width {
-            for (text, style) in &word {
-                self.push(text, *style);
+            for (text, style, link) in &word {
+                self.push(text, *style, link.as_deref());
             }
             return;
         }
-        for (text, style) in &word {
+        for (text, style, link) in &word {
             let mut chunk = String::new();
             let mut chunk_width = 0;
             for ch in text.chars() {
@@ -156,7 +206,7 @@ impl Wrapper {
                 if self.cur_width + chunk_width + cw > self.width
                     && self.cur_width + chunk_width > 0
                 {
-                    self.push(&chunk, *style);
+                    self.push(&chunk, *style, link.as_deref());
                     self.flush();
                     chunk.clear();
                     chunk_width = 0;
@@ -164,7 +214,7 @@ impl Wrapper {
                 chunk.push(ch);
                 chunk_width += cw;
             }
-            self.push(&chunk, *style);
+            self.push(&chunk, *style, link.as_deref());
         }
     }
 }
@@ -173,11 +223,39 @@ impl Wrapper {
 mod tests {
     use super::*;
 
-    fn plain(lines: &[Vec<Span<'static>>]) -> Vec<String> {
+    fn plain(lines: &[Wrapped]) -> Vec<String> {
         lines
             .iter()
-            .map(|l| l.iter().map(|s| s.content.as_ref()).collect())
+            .map(|l| l.spans.iter().map(|s| s.content.as_ref()).collect())
             .collect()
+    }
+
+    #[test]
+    fn links_keep_their_columns_across_wrapping() {
+        let pieces = [
+            Piece::text("see ", Style::new()),
+            Piece::text("the docs", Style::new()).linked(Some("docs.md")),
+            Piece::text(" (docs.md)", Style::new()).linked(Some("docs.md")),
+            Piece::text(" now", Style::new()),
+        ];
+        let lines = wrap(&pieces, 14);
+        assert_eq!(plain(&lines), ["see the docs", "(docs.md) now"]);
+        assert_eq!(
+            lines[0].links,
+            [LinkSpan {
+                start: 4,
+                end: 12,
+                url: "docs.md".into()
+            }]
+        );
+        assert_eq!(
+            lines[1].links,
+            [LinkSpan {
+                start: 0,
+                end: 9,
+                url: "docs.md".into()
+            }]
+        );
     }
 
     #[test]

@@ -1,6 +1,6 @@
 [package]
 name = "mido"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.93"
 description = "Markdown In, Document Out. A terminal Markdown reader."
@@ -12,7 +12,10 @@ categories = ["command-line-utilities", "text-processing"]
 anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive"] }
 crossterm = "0.29.0"
+ignore = "0.4.33"
 notify = "8.2.0"
+nucleo-matcher = "0.3.1"
+open = "5.4.4"
 pulldown-cmark = { version = "0.13.4", default-features = false }
 ratatui = "0.30.2"
 syntect = { version = "5.3.0", default-features = false, features = ["default-fancy"] }
@@ -21,3 +24,4 @@ unicode-width = "0.2.2"
 
 [dev-dependencies]
 insta = "1.48.0"
+tempfile = "3.27.0"

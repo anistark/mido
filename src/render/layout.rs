@@ -4,9 +4,9 @@ use unicode_width::UnicodeWidthChar;
 
 use super::syntax;
 use super::theme::{ColorMode, Theme};
-use super::wrap::{Piece, width, wrap};
+use super::wrap::{LinkSpan, Piece, Wrapped, width, wrap};
 use crate::markdown::{
-    Alignment, Block, BlockKind, Document, Footnote, Inline, List, Table, plain_text,
+    Alignment, Block, BlockKind, Document, Footnote, Inline, List, Slugger, Table, plain_text, slug,
 };
 
 const BULLETS: [&str; 3] = ["•", "◦", "▪"];
@@ -16,6 +16,7 @@ pub struct Layout {
     pub lines: Vec<Line<'static>>,
     pub sources: Vec<Option<usize>>,
     pub headings: Vec<Heading>,
+    pub links: Vec<Link>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,6 +24,15 @@ pub struct Heading {
     pub level: u8,
     pub text: String,
     pub line: usize,
+    pub slug: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Link {
+    pub line: usize,
+    pub start: u16,
+    pub end: u16,
+    pub url: String,
 }
 
 impl Layout {
@@ -31,6 +41,20 @@ impl Layout {
             .iter()
             .position(|s| s.is_some_and(|o| o >= offset))
             .unwrap_or(0)
+    }
+
+    pub fn line_for_anchor(&self, anchor: &str) -> Option<usize> {
+        let wanted = slug(anchor);
+        self.headings
+            .iter()
+            .find(|h| h.slug == wanted)
+            .map(|h| h.line)
+    }
+
+    pub fn link_at(&self, line: usize, col: u16) -> Option<&Link> {
+        self.links
+            .iter()
+            .find(|l| l.line == line && l.start <= col && col < l.end)
     }
 
     pub fn source_at(&self, line: usize) -> Option<usize> {
@@ -56,6 +80,7 @@ pub fn layout(doc: &Document, theme: &Theme, width: usize) -> Layout {
         list_depth: 0,
         tight: false,
         source: None,
+        slugger: Slugger::default(),
     };
     r.blocks(&doc.blocks);
     r.footnotes(&doc.footnotes);
@@ -72,6 +97,7 @@ struct Renderer<'a> {
     list_depth: usize,
     tight: bool,
     source: Option<usize>,
+    slugger: Slugger,
 }
 
 impl Renderer<'_> {
@@ -81,7 +107,25 @@ impl Renderer<'_> {
     }
 
     fn emit(&mut self, spans: Vec<Span<'static>>) {
+        self.emit_with(spans, Vec::new());
+    }
+
+    fn emit_line(&mut self, line: Wrapped) {
+        self.emit_with(line.spans, line.links);
+    }
+
+    fn emit_with(&mut self, spans: Vec<Span<'static>>, links: Vec<LinkSpan>) {
         let mut line = self.first.take().unwrap_or_else(|| self.prefix.clone());
+        let offset: usize = line.iter().map(|s| width(&s.content)).sum();
+        let number = self.out.lines.len();
+        for l in links {
+            self.out.links.push(Link {
+                line: number,
+                start: (l.start + offset) as u16,
+                end: (l.end + offset) as u16,
+                url: l.url,
+            });
+        }
         line.extend(spans);
         while line
             .last()
@@ -138,38 +182,44 @@ impl Renderer<'_> {
     }
 
     fn heading(&mut self, level: u8, content: &[Inline]) {
+        let text = plain_text(content);
         self.out.headings.push(Heading {
             level,
-            text: plain_text(content),
+            slug: self.slugger.unique(&text),
+            text,
             line: self.out.lines.len(),
         });
         let style = self.theme.heading(level);
         match level {
             1 if self.theme.mode == ColorMode::Mono => {
-                for spans in wrap(&self.inlines(content, style), self.avail()) {
-                    self.emit(spans);
+                for line in wrap(&self.inlines(content, style), self.avail()) {
+                    self.emit_line(line);
                 }
                 let rule = "━".repeat(self.avail());
                 self.emit(vec![Span::styled(rule, self.theme.rule())]);
             }
             1 => {
                 let pieces = self.inlines(content, style);
-                for spans in wrap(&pieces, self.avail().saturating_sub(2).max(1)) {
+                for mut line in wrap(&pieces, self.avail().saturating_sub(2).max(1)) {
                     let mut row = vec![Span::styled(" ", style)];
-                    row.extend(spans);
+                    row.extend(line.spans);
                     row.push(Span::styled(" ", style));
-                    self.emit(row);
+                    for l in &mut line.links {
+                        l.start += 1;
+                        l.end += 1;
+                    }
+                    self.emit_with(row, line.links);
                 }
             }
             2 => {
                 let lines = wrap(&self.inlines(content, style), self.avail());
                 let widest = lines
                     .iter()
-                    .map(|l| l.iter().map(|s| width(&s.content)).sum::<usize>())
+                    .map(|l| l.spans.iter().map(|s| width(&s.content)).sum::<usize>())
                     .max()
                     .unwrap_or(1);
-                for spans in lines {
-                    self.emit(spans);
+                for line in lines {
+                    self.emit_line(line);
                 }
                 let rule = "─".repeat(widest.max(1));
                 self.emit(vec![Span::styled(rule, self.theme.heading_rule())]);
@@ -181,8 +231,8 @@ impl Renderer<'_> {
                 first.push(Span::styled(marker, self.theme.faint()));
                 self.first = Some(first);
                 self.prefix.push(Span::raw(indent));
-                for spans in wrap(&self.inlines(content, style), self.avail()) {
-                    self.emit(spans);
+                for line in wrap(&self.inlines(content, style), self.avail()) {
+                    self.emit_line(line);
                 }
                 self.first = None;
                 self.prefix.pop();
@@ -192,53 +242,67 @@ impl Renderer<'_> {
 
     fn paragraph(&mut self, content: &[Inline]) {
         let pieces = self.inlines(content, self.base);
-        for spans in wrap(&pieces, self.avail()) {
-            self.emit(spans);
+        for line in wrap(&pieces, self.avail()) {
+            self.emit_line(line);
         }
     }
 
     fn inlines(&self, inlines: &[Inline], style: Style) -> Vec<Piece> {
         let mut out = Vec::new();
-        self.push_inlines(inlines, style, &mut out);
+        self.push_inlines(inlines, style, None, &mut out);
         out
     }
 
-    fn push_inlines(&self, inlines: &[Inline], style: Style, out: &mut Vec<Piece>) {
+    fn push_inlines(
+        &self,
+        inlines: &[Inline],
+        style: Style,
+        link: Option<&str>,
+        out: &mut Vec<Piece>,
+    ) {
         for inline in inlines {
             match inline {
-                Inline::Text(s) => out.push(Piece::text(s.replace('\t', "    "), style)),
+                Inline::Text(s) => {
+                    out.push(Piece::text(s.replace('\t', "    "), style).linked(link))
+                }
                 Inline::Code(s) => {
                     let text = if self.theme.mode == ColorMode::Mono {
                         format!("`{s}`")
                     } else {
                         format!(" {s} ")
                     };
-                    out.push(Piece::atomic(text, self.theme.code_inline()));
+                    out.push(Piece::atomic(text, self.theme.code_inline()).linked(link));
                 }
                 Inline::Emphasis(c) => {
-                    self.push_inlines(c, style.add_modifier(Modifier::ITALIC), out)
+                    self.push_inlines(c, style.add_modifier(Modifier::ITALIC), link, out)
                 }
-                Inline::Strong(c) => self.push_inlines(c, style.add_modifier(Modifier::BOLD), out),
+                Inline::Strong(c) => {
+                    self.push_inlines(c, style.add_modifier(Modifier::BOLD), link, out)
+                }
                 Inline::Strikethrough(c) => {
-                    self.push_inlines(c, style.add_modifier(Modifier::CROSSED_OUT), out)
+                    self.push_inlines(c, style.add_modifier(Modifier::CROSSED_OUT), link, out)
                 }
                 Inline::Link { content, url, .. } => {
-                    self.push_inlines(content, style.patch(self.theme.link()), out);
+                    let target = Some(url.as_str());
+                    self.push_inlines(content, style.patch(self.theme.link()), target, out);
                     if !url.is_empty() && plain_text(content) != *url {
-                        out.push(Piece::text(" ", style));
-                        out.push(Piece::text(format!("({url})"), self.theme.link_url()));
+                        out.push(Piece::text(" ", style).linked(target));
+                        out.push(
+                            Piece::text(format!("({url})"), self.theme.link_url()).linked(target),
+                        );
                     }
                 }
                 Inline::Image { alt, url } => {
-                    out.push(Piece::text("▣ ", Style::new().fg(self.theme.accent)));
-                    self.push_inlines(alt, style.add_modifier(Modifier::ITALIC), out);
-                    out.push(Piece::text(format!(" ({url})"), self.theme.link_url()));
+                    out.push(Piece::text("▣ ", Style::new().fg(self.theme.accent)).linked(link));
+                    self.push_inlines(alt, style.add_modifier(Modifier::ITALIC), link, out);
+                    out.push(Piece::text(format!(" ({url})"), self.theme.link_url()).linked(link));
                 }
-                Inline::FootnoteRef(label) => {
-                    out.push(Piece::atomic(footnote_label(label), self.theme.footnote()))
+                Inline::FootnoteRef(label) => out
+                    .push(Piece::atomic(footnote_label(label), self.theme.footnote()).linked(link)),
+                Inline::Html(s) => {
+                    out.push(Piece::text(s.clone(), self.theme.faint()).linked(link))
                 }
-                Inline::Html(s) => out.push(Piece::text(s.clone(), self.theme.faint())),
-                Inline::SoftBreak => out.push(Piece::text(" ", style)),
+                Inline::SoftBreak => out.push(Piece::text(" ", style).linked(link)),
                 Inline::HardBreak => out.push(Piece::Break),
             }
         }
@@ -438,7 +502,7 @@ impl Renderer<'_> {
         let wrapped: Vec<Vec<Vec<Span<'static>>>> = cells
             .iter()
             .zip(widths)
-            .map(|(cell, w)| wrap(cell, *w))
+            .map(|(cell, w)| wrap(cell, *w).into_iter().map(|l| l.spans).collect())
             .collect();
         let height = wrapped.iter().map(Vec::len).max().unwrap_or(0).max(1);
         for i in 0..height {
@@ -484,8 +548,8 @@ impl Renderer<'_> {
             }
             pieces.push(Piece::text(line.replace('\t', "    "), style));
         }
-        for spans in wrap(&pieces, self.avail()) {
-            self.emit(spans);
+        for line in wrap(&pieces, self.avail()) {
+            self.emit_line(line);
         }
     }
 

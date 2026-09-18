@@ -51,3 +51,43 @@ fn source_map_round_trips() {
     let line = narrow.line_for_source(anchor);
     assert_eq!(narrow.source_at(line), Some(anchor));
 }
+
+#[test]
+fn links_and_anchors_are_indexed() {
+    let text = std::fs::read_to_string("tests/fixtures/basic.md").unwrap();
+    let out = layout(&parse(&text), &Theme::dark(), 60);
+    let lines = out.plain_lines();
+    let link = out
+        .links
+        .iter()
+        .find(|l| l.url == "https://example.com/docs")
+        .expect("link indexed");
+    let shown = &lines[link.line][..];
+    let cols: String = shown
+        .chars()
+        .scan(0usize, |col, c| {
+            let start = *col;
+            *col += unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
+            Some((start, c))
+        })
+        .filter(|(col, _)| (link.start as usize..link.end as usize).contains(col))
+        .map(|(_, c)| c)
+        .collect();
+    assert!(cols.starts_with("link"), "{cols:?}");
+    assert!(
+        out.links.iter().any(|l| l.url == "https://example.com"),
+        "autolink indexed"
+    );
+    assert!(out.link_at(link.line, link.start).is_some());
+    assert!(
+        out.link_at(link.line, link.end).is_none()
+            || out.link_at(link.line, link.end).unwrap().url != link.url
+    );
+
+    assert_eq!(out.headings[1].slug, "second-level");
+    assert_eq!(
+        out.line_for_anchor("#Second-Level".trim_start_matches('#')),
+        Some(out.headings[1].line)
+    );
+    assert_eq!(out.line_for_anchor("nope"), None);
+}

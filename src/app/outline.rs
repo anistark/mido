@@ -19,15 +19,26 @@ pub struct Tree {
 
 impl Tree {
     pub fn new(headings: &[Heading]) -> Self {
+        let mut stack: Vec<u8> = Vec::new();
+        let depths = headings
+            .iter()
+            .map(|h| {
+                while stack.last().is_some_and(|&level| level >= h.level) {
+                    stack.pop();
+                }
+                stack.push(h.level);
+                stack.len() - 1
+            })
+            .collect();
+        Self::from_depths(depths)
+    }
+
+    pub fn from_depths(depths: Vec<usize>) -> Self {
         let mut stack: Vec<usize> = Vec::new();
-        let mut depths = Vec::with_capacity(headings.len());
-        let mut parents = Vec::with_capacity(headings.len());
-        for (i, h) in headings.iter().enumerate() {
-            while stack.last().is_some_and(|&j| headings[j].level >= h.level) {
-                stack.pop();
-            }
+        let mut parents = Vec::with_capacity(depths.len());
+        for (i, &depth) in depths.iter().enumerate() {
+            stack.truncate(depth);
             parents.push(stack.last().copied());
-            depths.push(stack.len());
             stack.push(i);
         }
         Self { depths, parents }
@@ -110,6 +121,7 @@ mod tests {
             level,
             text: text.to_string(),
             line: 0,
+            slug: String::new(),
         }
     }
 

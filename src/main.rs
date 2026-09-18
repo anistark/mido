@@ -1,11 +1,12 @@
 use std::io::{self, IsTerminal};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
 use mido::app::{App, Source};
 use mido::cli::Cli;
 use mido::markdown::parse;
+use mido::project::Project;
 use mido::render::{ansi, layout::layout, theme::Theme};
 
 fn main() -> Result<()> {
@@ -13,6 +14,13 @@ fn main() -> Result<()> {
     let source = source(&cli)?;
     let text = source.read().with_context(|| match &source {
         Source::File(path) => format!("cannot read {}", path.display()),
+        Source::Project { project, file } => format!(
+            "cannot read {}",
+            file.as_ref()
+                .map(|f| project.absolute(f))
+                .unwrap_or_default()
+                .display()
+        ),
         Source::Stdin => "cannot read stdin".to_string(),
     })?;
 
@@ -27,6 +35,36 @@ fn main() -> Result<()> {
     App::new(source, &text, cli.width).run()
 }
 
+fn source(cli: &Cli) -> Result<Source> {
+    match &cli.path {
+        Some(path) if path == Path::new("-") => Ok(Source::Stdin),
+        Some(path) if path.is_dir() => Ok(project(path)),
+        Some(path) => Ok(Source::File(path.clone())),
+        None if !io::stdin().is_terminal() => Ok(Source::Stdin),
+        None => {
+            let here = PathBuf::from(".");
+            let source = project(&here);
+            if let Source::Project {
+                project,
+                file: None,
+            } = &source
+            {
+                bail!(
+                    "no Markdown files in {}\n\nUsage: mido <FILE or FOLDER>  (or pipe Markdown on stdin)",
+                    project.root.display()
+                );
+            }
+            Ok(source)
+        }
+    }
+}
+
+fn project(root: &Path) -> Source {
+    let project = Project::scan(root);
+    let file = project.entry_file();
+    Source::Project { project, file }
+}
+
 fn print_width() -> usize {
     if io::stdout().is_terminal() {
         crossterm::terminal::size()
@@ -34,20 +72,5 @@ fn print_width() -> usize {
             .unwrap_or(80)
     } else {
         80
-    }
-}
-
-fn source(cli: &Cli) -> Result<Source> {
-    match &cli.path {
-        Some(path) if path == Path::new("-") => Ok(Source::Stdin),
-        Some(path) if path.is_dir() => {
-            bail!(
-                "{} is a directory, pass a Markdown file. Project mode arrives in 0.2",
-                path.display()
-            )
-        }
-        Some(path) => Ok(Source::File(path.clone())),
-        None if !io::stdin().is_terminal() => Ok(Source::Stdin),
-        None => bail!("no file given\n\nUsage: mido <FILE>  (or pipe Markdown on stdin)"),
     }
 }
