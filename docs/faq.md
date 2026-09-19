@@ -26,7 +26,7 @@ Without `-p`, output that is not a terminal is written as plain text, so `mido f
 
 ## Can I edit the file?
 
-`E` opens the file in `$VISUAL` or `$EDITOR` and reloads it when you come back. A built-in editor is on the [roadmap](roadmap.md).
+`E` opens the file in `$VISUAL` or `$EDITOR` and reloads it when you come back. A built-in editor is planned.
 
 ## Do images show?
 
