@@ -67,3 +67,16 @@ if (term && replay && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
   $$(".term-doc .row").forEach((row, i) => row.style.setProperty("--i", i));
   term.classList.add("play");
 }
+
+const demo = $(".demo-frame video");
+if (demo) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    demo.removeAttribute("autoplay");
+    demo.pause();
+  } else {
+    const play = new IntersectionObserver((entries) => {
+      entries.forEach((e) => (e.isIntersecting ? demo.play().catch(() => {}) : demo.pause()));
+    }, { threshold: 0.4 });
+    play.observe(demo);
+  }
+}

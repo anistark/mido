@@ -7,7 +7,10 @@ on:
       - "docs/**"
       - "CHANGELOG.md"
       - "Cargo.toml"
+      - "src/**"
       - ".github/workflows/docs.yml"
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -22,11 +25,16 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: docs
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release
+      - run: echo "$PWD/target/release" >> "$GITHUB_PATH"
+      - uses: charmbracelet/vhs-action@v2
+        with:
+          version: v0.11.0
+          path: docs/tapes/landing.tape
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: docs/package.json
@@ -36,7 +44,9 @@ jobs:
           cache: pnpm
           cache-dependency-path: docs/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+        working-directory: docs
       - run: pnpm build
+        working-directory: docs
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs/_site

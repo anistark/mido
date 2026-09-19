@@ -9,7 +9,11 @@ kbd: true
 
 # Keys
 
-mido is keyboard first and vim-flavored. The mouse works too: the wheel scrolls, and a click follows a link or selects a row in a panel. Press `?` or `h` inside mido for the same list.
+mido is keyboard first and vim-flavored. The mouse works too: the wheel scrolls, and a click follows a link or selects a row in a panel. Press `?` or `h` inside mido for the same list, grouped the same way.
+
+Search is smart-case: a lowercase query matches any case, and a query with a capital letter matches exactly. Before 1.0 a minor release may change keys, and every change is listed in the [changelog](../CHANGELOG.md).
+
+The tables below are generated from the keymap in the source, so they cannot drift from what the binary does.
 
 ## Reading
 
@@ -21,8 +25,6 @@ mido is keyboard first and vim-flavored. The mouse works too: the wheel scrolls,
 | `g` / `G` | Top / bottom |
 | `t` | Table of contents |
 | `r` | Reload the file |
-| `h`, `?` | Help |
-| `q` | Quit |
 
 ## Panels and focus
 
@@ -33,7 +35,7 @@ mido is keyboard first and vim-flavored. The mouse works too: the wheel scrolls,
 | `Tab` / `Shift-Tab` | Cycle focus between the panes |
 | `Tab` then `←` / `→` | Move focus in that direction |
 | `l` | Focus the pane to the right |
-| `j` / `k` in a panel | Move, `Enter` opens or returns |
+| `j` / `k` in a panel | Move, Enter opens or returns |
 | `Space`, `←` / `→` in a panel | Fold, collapse / expand a folder or section |
 | `-` / `=` in a panel | Fold all / unfold all |
 | `T` in the files panel | Show titles instead of file names |
@@ -51,10 +53,13 @@ mido is keyboard first and vim-flavored. The mouse works too: the wheel scrolls,
 
 | Key | Action |
 | --- | --- |
-| `/` | Search. `Enter` keeps the query, `Esc` cancels |
+| `/` | Search, Enter to keep, Esc to cancel |
 | `n` / `N` | Next / previous match |
-| `E` | Edit the file in `$EDITOR`, reload on return |
+| `E` | Edit the file in $EDITOR, reload on return |
 
-Search is smart-case: a lowercase query matches any case, and a query with a capital letter matches exactly.
+## Help and quit
 
-Before 1.0 a minor release may change keys. Every change is listed in the [changelog](../CHANGELOG.md).
+| Key | Action |
+| --- | --- |
+| `h`, `?` | This help |
+| `q` | Quit |

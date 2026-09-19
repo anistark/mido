@@ -1,4 +1,4 @@
-use std::io::{self, IsTerminal};
+use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -9,8 +9,14 @@ use mido::markdown::parse;
 use mido::project::Project;
 use mido::render::{ansi, layout::layout, theme::Theme};
 
+const MAN_PAGE: &str = include_str!(concat!(env!("OUT_DIR"), "/mido.1"));
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    if cli.man {
+        io::stdout().lock().write_all(MAN_PAGE.as_bytes())?;
+        return Ok(());
+    }
     let source = source(&cli)?;
     let text = source.read().with_context(|| match &source {
         Source::File(path) => format!("cannot read {}", path.display()),
@@ -38,6 +44,10 @@ fn main() -> Result<()> {
 fn source(cli: &Cli) -> Result<Source> {
     match &cli.path {
         Some(path) if path == Path::new("-") => Ok(Source::Stdin),
+        Some(path) if path == Path::new("docs") && !path.exists() => {
+            let root = mido::docs::extract().context("cannot unpack the bundled documentation")?;
+            Ok(project(&root))
+        }
         Some(path) if path.is_dir() => Ok(project(path)),
         Some(path) => Ok(Source::File(path.clone())),
         None if !io::stdin().is_terminal() => Ok(Source::Stdin),

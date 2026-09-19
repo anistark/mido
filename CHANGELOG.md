@@ -2,6 +2,23 @@
 
 All notable changes to mido are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com), and versions follow semver. Before 1.0, a minor release may change keys or configuration.
 
+## [0.3.0] - Unreleased
+
+### Added
+
+- Documentation site at https://anistark.github.io/mido, built with Eleventy from the Markdown pages in `docs/` and deployed by CI. The pages carry only front matter on top of plain Markdown, so `mido docs/` reads them too.
+- `mido docs` opens the bundled documentation offline, extracted from the binary into a temporary folder, whenever nothing named `docs` exists in the current directory.
+- `--man` prints the man page, generated at build time with clap_mangen.
+- The help overlay groups keys by task. `docs/keys.md` is generated from the same table, and a test fails when the two drift.
+- Contributor docs: the pipeline, adding a block type, writing snapshot tests.
+- CI runs fmt, clippy and the tests on Linux, macOS and Windows, and renders every docs page in print mode.
+- The landing page demo is recorded by VHS from `docs/tapes/landing.tape` on every deploy.
+- MIT license file.
+
+### Changed
+
+- The license is MIT alone, no longer MIT or Apache-2.0.
+
 ## [0.2.0] - Unreleased
 
 ### Added

@@ -9,7 +9,7 @@ use clap::Parser;
     about = "Markdown In, Document Out. A terminal Markdown reader."
 )]
 pub struct Cli {
-    /// Markdown file to read, or - for stdin
+    /// Markdown file or folder to read, - for stdin, or docs for the bundled documentation
     pub path: Option<PathBuf>,
 
     /// Print styled text to stdout instead of opening the viewer
@@ -19,4 +19,8 @@ pub struct Cli {
     /// Cap the content width in columns (default: the full terminal width)
     #[arg(short, long, value_name = "COLS")]
     pub width: Option<usize>,
+
+    /// Print the man page as roff to stdout
+    #[arg(long)]
+    pub man: bool,
 }

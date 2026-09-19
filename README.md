@@ -19,7 +19,10 @@ mido                    # the current folder
 mido -                  # read Markdown from stdin
 mido -p README.md       # print styled text to stdout, pipe it to less -R
 mido -w 80 notes.md     # cap the width (default: full terminal width)
+mido docs               # read the bundled documentation offline
 ```
+
+The full documentation is at [anistark.github.io/mido](https://anistark.github.io/mido).
 
 Piping without `-p` prints plain text, so `mido file.md > out.txt` never leaks escape codes.
 
@@ -70,6 +73,10 @@ On terminals wide enough an outline of the headings sits in a tinted card at the
 
 > Anything mido cannot render, such as raw HTML, is shown as source rather than dropped.
 
-Checkout [Changelog](./CHANGELOG.md) for all updates.
+Checkout [Changelog](./CHANGELOG.md) for all updates. Contributions are welcome, see [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+## License
+
+[MIT](./LICENSE)
 
 [^1]: Footnotes collect at the end of the document.

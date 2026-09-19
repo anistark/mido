@@ -36,6 +36,10 @@ Not yet. An image renders as a placeholder with its alt text and path. Inline im
 
 mido is built on crossterm, which supports Windows terminals. It has been developed on macOS and Linux, so please report anything that looks off.
 
+## Can I read the docs offline?
+
+Yes. `mido docs` opens this documentation from a copy bundled in the binary, so it works with no network and always matches the version you have installed. If the current directory has its own `docs` folder, that folder opens instead.
+
 ## Where is the config file?
 
 There is none yet. Themes, fonts and configuration are the theme of the 0.4 release. Until then the defaults are the design.

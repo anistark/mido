@@ -12,7 +12,7 @@ order: 2
 mido [OPTIONS] [PATH]
 ```
 
-`PATH` is a Markdown file, a folder, or `-` for stdin. With no path, mido opens the current folder.
+`PATH` is a Markdown file, a folder, `-` for stdin, or `docs` for the bundled documentation. With no path, mido opens the current folder.
 
 ## Options
 
@@ -20,6 +20,7 @@ mido [OPTIONS] [PATH]
 | --- | --- |
 | `-p`, `--print` | Print styled text to stdout instead of opening the viewer |
 | `-w`, `--width <COLS>` | Cap the content width in columns. The default is the full terminal width |
+| `--man` | Print the man page as roff to stdout |
 | `-h`, `--help` | Show the help |
 | `-V`, `--version` | Show the version |
 
@@ -32,6 +33,7 @@ mido                    # the current folder
 mido -                  # read Markdown from stdin
 mido -p README.md       # print styled text to stdout, pipe it to less -R
 mido -w 80 notes.md     # cap the width at 80 columns
+mido docs               # read this documentation offline
 ```
 
 ## Width
@@ -50,6 +52,19 @@ Piping or redirecting without `-p` writes plain text with no escape codes, so th
 
 ```sh
 mido README.md > out.txt
+```
+
+## Bundled documentation
+
+`mido docs` opens this documentation in project mode with no network, unpacked from the binary into a temporary folder. A file or folder called `docs` in the current directory always wins, so inside a project with its own docs folder `mido docs` opens that folder, exactly like `mido docs/`.
+
+## Man page
+
+The man page is generated at build time from the command definition. `mido --man` writes it as roff, so it can be read directly or installed:
+
+```sh
+mido --man | man -l -
+mido --man > ~/.local/share/man/man1/mido.1
 ```
 
 ## Exit

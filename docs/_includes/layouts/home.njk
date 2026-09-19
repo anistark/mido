@@ -21,6 +21,19 @@ bodyClass: home
       {{ content | fromFirstSection | safe }}
     </div>
   </section>
+  {% if demo.available %}
+  <section class="demo">
+    <h2 class="title">See it run</h2>
+    <p class="section-lead">Recorded with VHS from a tape in the repository and regenerated on every deploy, so it always shows the current release.</p>
+    <figure class="demo-frame glass">
+      <video autoplay muted loop playsinline controls preload="metadata" aria-label="mido browsing its own documentation in a terminal">
+        <source src="/assets/img/demo.webm" type="video/webm">
+        <source src="/assets/img/demo.mp4" type="video/mp4">
+      </video>
+    </figure>
+  </section>
+  {% endif %}
+
   <section class="pipeline">
     <h2 class="title">One pipeline, two outputs</h2>
     <p class="section-lead">Every block keeps its source range, so the same model drives the screen, the outline, search, link following and print mode.</p>
@@ -80,7 +93,7 @@ the full list.
   <section class="cta glass">
     <div class="cta-copy">
       <h2 class="title">Built in the open</h2>
-      <p class="section-lead">mido is MIT or Apache-2.0 licensed, written in Rust on ratatui, and shaped by the people who read Markdown in a terminal all day. Report a bug, suggest a key, pick up an open issue, or teach it a new element. Every stage of the pipeline has tests to lean on.</p>
+      <p class="section-lead">mido is MIT licensed, written in Rust on ratatui, and shaped by the people who read Markdown in a terminal all day. Report a bug, suggest a key, pick up an open issue, or teach it a new element. Every stage of the pipeline has tests to lean on.</p>
       <div class="actions">
         <a class="btn btn-primary" href="{{ site.repo }}">Contribute on GitHub</a>
         <a class="btn" href="{{ site.repo }}/issues/new">Open an issue</a>

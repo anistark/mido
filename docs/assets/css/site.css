@@ -562,6 +562,24 @@ body {
   font-size: 1rem;
 }
 
+/* Demo */
+
+.demo { margin-top: var(--intermission); }
+
+.demo-frame {
+  margin: var(--reel) 0 0;
+  padding: 10px;
+  overflow: hidden;
+}
+
+.demo-frame video {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: calc(var(--radius) - 8px);
+  background: var(--well);
+}
+
 /* Pipeline */
 
 .pipeline { margin-top: var(--intermission); }

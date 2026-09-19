@@ -1,6 +1,6 @@
 mod draw;
 mod finder;
-mod keys;
+pub mod keys;
 mod outline;
 mod search;
 mod watch;
@@ -1061,7 +1061,7 @@ impl App {
     }
 
     fn key_help(&mut self, key: KeyEvent) {
-        let last = keys::KEYS.len().saturating_sub(1);
+        let last = keys::help_rows().saturating_sub(1);
         match key.code {
             KeyCode::Char('j') | KeyCode::Down => {
                 self.help_scroll = (self.help_scroll + 1).min(last)

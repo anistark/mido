@@ -49,7 +49,9 @@ With a folder, or no argument at all, mido lists the Markdown files in a sidebar
 
 ## Get help
 
-Press `?` or `h` at any time for the key overlay. `t` opens a table of contents you can jump from. The full list is on the [Keys](keys.md) page.
+Press `?` or `h` at any time for the key overlay, grouped by task. `t` opens a table of contents you can jump from. The full list is on the [Keys](keys.md) page.
+
+This documentation ships inside the binary. `mido docs` opens it offline, in project mode, whenever there is no `docs` folder in the current directory.
 
 ## Read from a pipe
 

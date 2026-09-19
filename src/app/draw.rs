@@ -8,7 +8,7 @@ use ratatui::widgets::{
     ScrollbarOrientation, ScrollbarState, StatefulWidget, Widget,
 };
 
-use super::keys::KEYS;
+use super::keys::{self, SECTIONS};
 use super::{App, Focus, Mode, Panel};
 use crate::render::theme::ColorMode;
 use crate::render::wrap::{Piece, width, wrap};
@@ -617,19 +617,32 @@ impl App {
     }
 
     fn draw_help(&mut self, buf: &mut Buffer, area: Rect) {
-        let key_width = KEYS.iter().map(|(k, _)| width(k)).max().unwrap_or(0);
-        let lines: Vec<Line> = KEYS
+        let key_width = SECTIONS
             .iter()
-            .map(|(k, action)| {
-                Line::from(vec![
+            .flat_map(|s| s.bindings)
+            .map(|(k, _)| width(&keys::plain(k)))
+            .max()
+            .unwrap_or(0);
+        let mut lines: Vec<Line> = Vec::with_capacity(keys::help_rows());
+        for (i, section) in SECTIONS.iter().enumerate() {
+            if i > 0 {
+                lines.push(Line::default());
+            }
+            lines.push(Line::from(Span::styled(
+                format!(" {}", section.title),
+                self.theme.text().add_modifier(Modifier::BOLD),
+            )));
+            for (k, action) in section.bindings {
+                let k = keys::plain(k);
+                lines.push(Line::from(vec![
                     Span::styled(
                         format!(" {k:<key_width$}  "),
                         Style::new().fg(self.theme.accent),
                     ),
                     Span::styled((*action).to_string(), self.theme.text()),
-                ])
-            })
-            .collect();
+                ]));
+            }
+        }
         let w = (lines.iter().map(Line::width).max().unwrap_or(0) as u16 + 3).min(area.width);
         let h = (lines.len() as u16 + 2).min(area.height);
         let popup = centered(area, w, h);
