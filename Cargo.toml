@@ -5,8 +5,24 @@ edition = "2024"
 rust-version = "1.93"
 description = "Markdown In, Document Out. A terminal Markdown reader."
 license = "MIT"
+repository = "https://github.com/anistark/mido"
+homepage = "https://anistark.github.io/mido"
+documentation = "https://anistark.github.io/mido"
 keywords = ["markdown", "tui", "terminal", "viewer", "ratatui"]
 categories = ["command-line-utilities", "text-processing"]
+exclude = [
+    "/.github",
+    "/docs/_*",
+    "/docs/assets",
+    "/docs/tapes",
+    "/docs/*.njk",
+    "/docs/*.js",
+    "/docs/package.json",
+    "/docs/pnpm-lock.yaml",
+    "/docs/.node-version",
+    "/docs/.gitignore",
+    "/justfile",
+]
 
 [dependencies]
 anyhow = "1.0.104"
