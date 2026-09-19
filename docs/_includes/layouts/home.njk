@@ -1,0 +1,95 @@
+---
+layout: layouts/base.njk
+bodyClass: home
+---
+<main class="landing">
+  <section class="hero">
+    <div class="hero-copy">
+      <h1 class="display">mido<span class="caret" aria-hidden="true"></span></h1>
+      <p class="lead">{{ site.tagline }}</p>
+      <p class="hero-blurb">{{ site.description }} Built in Rust on ratatui.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="/getting-started/">Get started</a>
+        <a class="btn" href="{{ site.repo }}">Source on GitHub</a>
+      </div>
+    </div>
+    {% include "partials/hero-terminal.njk" %}
+  </section>
+
+  <section class="readme glass">
+    <div class="prose">
+      {{ content | fromFirstSection | safe }}
+    </div>
+  </section>
+  <section class="pipeline">
+    <h2 class="title">One pipeline, two outputs</h2>
+    <p class="section-lead">Every block keeps its source range, so the same model drives the screen, the outline, search, link following and print mode.</p>
+    {% include "partials/pipeline.njk" %}
+  </section>
+
+  <section class="features">
+    <h2 class="title">A reader, not cat with colors</h2>
+    <div class="feature-grid">
+      <a class="feature glass" href="/panels/#files-sidebar">
+        <pre class="mini" aria-hidden="true">docs
+├ ▾ guide
+│  ├ install.md
+│  └ keys.md
+├ <b>README.md</b>
+└ CHANGELOG.md</pre>
+        <h3>Browse a folder</h3>
+        <p>Open a directory and the Markdown files hang in a tree on the left. It honours .gitignore and starts on the README.</p>
+      </a>
+      <a class="feature glass" href="/panels/#outline">
+        <pre class="mini" aria-hidden="true"><i>╭ Outline ──────╮</i>
+<i>│</i> ▾ <b>Install</b>       <i>│</i>
+<i>│</i> ▾ Use           <i>│</i>
+<i>│</i>   ├ Files       <i>│</i>
+<i>│</i>   └ Keys        <i>│</i>
+<i>╰───────────────╯</i></pre>
+        <h3>Keep the outline in view</h3>
+        <p>The headings sit in a card at the top right, fold like a tree and follow where you are reading.</p>
+      </a>
+      <a class="feature glass" href="/navigation/">
+        <pre class="mini" aria-hidden="true">See the <u>keys page</u> for
+the full list.
+
+<i>]</i> next   <i>[</i> previous
+<i>Enter</i> follow   <i>H</i> back</pre>
+        <h3>Follow links, keep history</h3>
+        <p>Relative links open in place, anchors jump to their heading, web links open in your browser. Back and forward work like a browser too.</p>
+      </a>
+      <a class="feature glass" href="/rendering/#mermaid-diagrams">
+        <pre class="mini" aria-hidden="true">┌───────┐
+│ Start │
+└───┬───┘
+    ▼
+ &lt; Ready? &gt;
+  ┌─┘ └─┐
+ yes    no
+  ▼      ▼
+╭────╮ ┌──────┐
+│ Go │ │ Wait │
+╰────╯ └──────┘</pre>
+        <h3>Diagrams in text</h3>
+        <p>Mermaid blocks are drawn with box characters. Flowcharts, sequence, class and state diagrams, pie, gantt and more.</p>
+      </a>
+    </div>
+  </section>
+
+  <section class="cta glass">
+    <div class="cta-copy">
+      <h2 class="title">Built in the open</h2>
+      <p class="section-lead">mido is MIT or Apache-2.0 licensed, written in Rust on ratatui, and shaped by the people who read Markdown in a terminal all day. Report a bug, suggest a key, pick up a roadmap item, or teach it a new element. Every stage of the pipeline has tests to lean on.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="{{ site.repo }}">Contribute on GitHub</a>
+        <a class="btn" href="{{ site.repo }}/issues/new">Open an issue</a>
+        <a class="btn" href="/roadmap/">Read the roadmap</a>
+      </div>
+    </div>
+    <pre class="cta-term" aria-hidden="true"><i>$</i> git clone https://github.com/anistark/mido
+<i>$</i> cd mido
+<i>$</i> cargo run -- README.md
+<i>$</i> <span class="caret"></span></pre>
+  </section>
+</main>

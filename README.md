@@ -70,4 +70,6 @@ On terminals wide enough an outline of the headings sits in a tinted card at the
 
 > Anything mido cannot render, such as raw HTML, is shown as source rather than dropped.
 
+Checkout [Changelog](./CHANGELOG.md) for all updates.
+
 [^1]: Footnotes collect at the end of the document.

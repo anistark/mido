@@ -1,0 +1,12 @@
+<nav class="files" id="files" aria-label="Pages">
+  <div class="files-head">docs</div>
+  <ol class="files-list">
+    {% for p in collections.docs %}
+    {% set last = loop.last %}
+    <li{% if p.url == page.url %} aria-current="page"{% endif %}>
+      <span class="tree" aria-hidden="true">{% if last %}└─{% else %}├─{% endif %}</span>
+      <a href="{{ p.url }}">{{ p.data.title }}</a>
+    </li>
+    {% endfor %}
+  </ol>
+</nav>

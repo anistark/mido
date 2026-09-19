@@ -1,0 +1,26 @@
+---
+layout: layouts/base.njk
+---
+{% set heads = content | outline %}
+<main class="shell">
+  {% include "partials/files.njk" %}
+  <article class="doc">
+    <div class="prose{% if kbd %} kbd-page{% endif %}">
+      {{ content | safe }}
+    </div>
+    {% include "partials/pager.njk" %}
+  </article>
+  <aside class="outline-col">
+    {% if heads.length %}
+    <nav class="outline glass" aria-label="On this page">
+      <span class="outline-title">Outline</span>
+      <ol class="outline-list">
+        {% for h in heads %}
+        {% set nxt = heads[loop.index0 + 1] %}
+        <li class="ol-{{ h.level }}"><a href="#{{ h.id }}" data-outline="{{ h.id }}"><span class="tree" aria-hidden="true">{% if h.level == 2 %}{% if nxt and nxt.level == 3 %}▾{% else %}&nbsp;{% endif %}{% else %}{% if nxt and nxt.level == 3 %}├{% else %}└{% endif %}{% endif %}</span>{{ h.text }}</a></li>
+        {% endfor %}
+      </ol>
+    </nav>
+    {% endif %}
+  </aside>
+</main>

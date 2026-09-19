@@ -1,0 +1,12 @@
+{% set prev = null %}
+{% set next = null %}
+{% for p in collections.docs %}
+  {% if p.url == page.url %}
+    {% set prev = collections.docs[loop.index0 - 1] if loop.index0 > 0 else null %}
+    {% set next = collections.docs[loop.index0 + 1] if not loop.last else null %}
+  {% endif %}
+{% endfor %}
+<footer class="pager">
+  {% if prev %}<a class="pager-prev" href="{{ prev.url }}"><small>Previous</small>{{ prev.data.title }}</a>{% else %}<span></span>{% endif %}
+  {% if next %}<a class="pager-next" href="{{ next.url }}"><small>Next</small>{{ next.data.title }}</a>{% endif %}
+</footer>
