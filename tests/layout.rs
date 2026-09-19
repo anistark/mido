@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use mido::markdown::parse;
-use mido::render::layout::layout;
+use mido::render::layout::{FrontMatterView, ImageSizes, Options, layout, layout_with};
 use mido::render::theme::Theme;
+use mido::render::wrap::LinkKind;
 use unicode_width::UnicodeWidthStr;
 
 fn render(name: &str, width: usize) -> Vec<String> {
@@ -10,9 +13,93 @@ fn render(name: &str, width: usize) -> Vec<String> {
 
 #[test]
 fn snapshots_at_60_columns() {
-    for name in ["basic", "lists", "tables", "quotes", "code"] {
+    for name in ["basic", "lists", "tables", "quotes", "code", "rich"] {
         insta::assert_snapshot!(name, render(name, 60).join("\n"));
     }
+}
+
+#[test]
+fn rich_content_links_and_front_matter() {
+    let text = std::fs::read_to_string("tests/fixtures/rich.md").unwrap();
+    let doc = parse(&text);
+    let out = layout(&doc, &Theme::dark(), 60);
+    let kinds: Vec<(LinkKind, &str)> = out.links.iter().map(|l| (l.kind, l.url.as_str())).collect();
+    assert!(
+        kinds.contains(&(LinkKind::Wiki, "Getting Started")),
+        "{kinds:?}"
+    );
+    assert!(
+        kinds.contains(&(LinkKind::Wiki, "keys#reading")),
+        "{kinds:?}"
+    );
+    assert!(kinds.contains(&(LinkKind::Footnote, "1")), "{kinds:?}");
+    let plain = out.plain_lines().join("\n");
+    assert!(plain.starts_with("▸ front matter: title, tags"), "{plain}");
+    assert!(plain.contains("● Note") && plain.contains("▲ Warning"));
+    assert!(plain.contains("🎉") && plain.contains("$e = mc^2$"));
+    assert!(plain.contains("▣ A tiny square (images/tiny.png)"));
+
+    let expanded = layout_with(
+        &doc,
+        &Theme::dark(),
+        60,
+        &Options {
+            front_matter: FrontMatterView::Expanded,
+            images: None,
+        },
+    );
+    let plain = expanded.plain_lines().join("\n");
+    assert!(
+        plain.contains("▾ front matter") && plain.contains("title: Rich content"),
+        "{plain}"
+    );
+    let hidden = layout_with(
+        &doc,
+        &Theme::dark(),
+        60,
+        &Options {
+            front_matter: FrontMatterView::Hidden,
+            images: None,
+        },
+    );
+    assert!(!hidden.plain_lines().join("\n").contains("front matter"));
+}
+
+#[test]
+fn images_reserve_rows_when_sizes_are_known() {
+    let text = std::fs::read_to_string("tests/fixtures/rich.md").unwrap();
+    let doc = parse(&text);
+    let mut sizes = HashMap::new();
+    sizes.insert("images/tiny.png".to_string(), (400u32, 200u32));
+    let out = layout_with(
+        &doc,
+        &Theme::dark(),
+        60,
+        &Options {
+            front_matter: FrontMatterView::Collapsed,
+            images: Some(ImageSizes {
+                font: (10, 20),
+                sizes,
+            }),
+        },
+    );
+    assert_eq!(out.images.len(), 1);
+    let slot = &out.images[0];
+    assert_eq!((slot.cols, slot.rows), (40, 10));
+    let lines = out.plain_lines();
+    for (row, line) in lines
+        .iter()
+        .enumerate()
+        .skip(slot.line)
+        .take(slot.rows as usize)
+    {
+        assert!(
+            line.trim().is_empty(),
+            "row {row} should be reserved: {line:?}"
+        );
+    }
+    assert!(lines[slot.line + slot.rows as usize].contains("A tiny square"));
+    assert!(!lines.join("\n").contains("(images/tiny.png)"));
 }
 
 #[test]

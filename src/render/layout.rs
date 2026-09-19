@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use unicode_width::UnicodeWidthChar;
@@ -5,12 +7,43 @@ use unicode_width::UnicodeWidthChar;
 use super::mermaid::{self, Kind};
 use super::syntax;
 use super::theme::{ColorMode, Theme};
-use super::wrap::{LinkSpan, Piece, Wrapped, width, wrap};
+use super::wrap::{LinkKind, LinkRef, LinkSpan, Piece, Wrapped, width, wrap};
 use crate::markdown::{
-    Alignment, Block, BlockKind, Document, Footnote, Inline, List, Slugger, Table, plain_text, slug,
+    Alert, Alignment, Block, BlockKind, Definition, Document, Footnote, FrontMatter, Inline, List,
+    Slugger, Table, plain_text, slug,
 };
 
 const BULLETS: [&str; 3] = ["•", "◦", "▪"];
+pub const MAX_IMAGE_ROWS: u32 = 40;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FrontMatterView {
+    #[default]
+    Collapsed,
+    Expanded,
+    Hidden,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ImageSizes {
+    pub font: (u16, u16),
+    pub sizes: HashMap<String, (u32, u32)>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Options {
+    pub front_matter: FrontMatterView,
+    pub images: Option<ImageSizes>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImageSlot {
+    pub line: usize,
+    pub col: u16,
+    pub cols: u16,
+    pub rows: u16,
+    pub url: String,
+}
 
 #[derive(Debug, Default)]
 pub struct Layout {
@@ -18,6 +51,7 @@ pub struct Layout {
     pub sources: Vec<Option<usize>>,
     pub headings: Vec<Heading>,
     pub links: Vec<Link>,
+    pub images: Vec<ImageSlot>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,6 +68,7 @@ pub struct Link {
     pub start: u16,
     pub end: u16,
     pub url: String,
+    pub kind: LinkKind,
 }
 
 impl Layout {
@@ -71,8 +106,13 @@ impl Layout {
 }
 
 pub fn layout(doc: &Document, theme: &Theme, width: usize) -> Layout {
+    layout_with(doc, theme, width, &Options::default())
+}
+
+pub fn layout_with(doc: &Document, theme: &Theme, width: usize, options: &Options) -> Layout {
     let mut r = Renderer {
         theme,
+        options,
         width: width.max(4),
         out: Layout::default(),
         prefix: Vec::new(),
@@ -83,13 +123,78 @@ pub fn layout(doc: &Document, theme: &Theme, width: usize) -> Layout {
         source: None,
         slugger: Slugger::default(),
     };
+    r.front_matter(doc.front_matter.as_ref());
     r.blocks(&doc.blocks);
     r.footnotes(&doc.footnotes);
     r.out
 }
 
+pub fn image_urls(doc: &Document) -> Vec<String> {
+    let mut urls = Vec::new();
+    collect_image_urls(&doc.blocks, &mut urls);
+    urls
+}
+
+fn collect_image_urls(blocks: &[Block], urls: &mut Vec<String>) {
+    for block in blocks {
+        match &block.kind {
+            BlockKind::Paragraph(content) => {
+                if let Some((_, url)) = sole_image(content) {
+                    urls.push(url.to_string());
+                }
+            }
+            BlockKind::BlockQuote { blocks, .. } => collect_image_urls(blocks, urls),
+            BlockKind::List(list) => {
+                for item in &list.items {
+                    collect_image_urls(&item.blocks, urls);
+                }
+            }
+            BlockKind::DefinitionList(defs) => {
+                for def in defs {
+                    for detail in &def.details {
+                        collect_image_urls(detail, urls);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn sole_image(content: &[Inline]) -> Option<(&[Inline], &str)> {
+    let mut found = None;
+    for inline in content {
+        match inline {
+            Inline::Image { alt, url } if found.is_none() => {
+                found = Some((alt.as_slice(), url.as_str()))
+            }
+            Inline::SoftBreak | Inline::HardBreak => {}
+            Inline::Text(s) if s.trim().is_empty() => {}
+            _ => return None,
+        }
+    }
+    found
+}
+
+fn sole_display_math(content: &[Inline]) -> Option<&str> {
+    let mut found = None;
+    for inline in content {
+        match inline {
+            Inline::Math {
+                display: true,
+                source,
+            } if found.is_none() => found = Some(source.as_str()),
+            Inline::SoftBreak | Inline::HardBreak => {}
+            Inline::Text(s) if s.trim().is_empty() => {}
+            _ => return None,
+        }
+    }
+    found
+}
+
 struct Renderer<'a> {
     theme: &'a Theme,
+    options: &'a Options,
     width: usize,
     out: Layout,
     prefix: Vec<Span<'static>>,
@@ -125,6 +230,7 @@ impl Renderer<'_> {
                 start: (l.start + offset) as u16,
                 end: (l.end + offset) as u16,
                 url: l.url,
+                kind: l.kind,
             });
         }
         line.extend(spans);
@@ -174,12 +280,46 @@ impl Renderer<'_> {
             BlockKind::Heading { level, content } => self.heading(*level, content),
             BlockKind::Paragraph(content) => self.paragraph(content),
             BlockKind::CodeBlock { lang, code } => self.code_block(lang.as_deref(), code),
-            BlockKind::BlockQuote(blocks) => self.quote(blocks),
+            BlockKind::BlockQuote { alert, blocks } => self.quote(*alert, blocks),
             BlockKind::List(list) => self.list(list),
+            BlockKind::DefinitionList(defs) => self.definitions(defs),
             BlockKind::Table(table) => self.table(table),
             BlockKind::Rule => self.rule(),
             BlockKind::Html(html) => self.html(html),
         }
+    }
+
+    fn front_matter(&mut self, meta: Option<&FrontMatter>) {
+        let Some(meta) = meta else { return };
+        let accent = Style::new().fg(self.theme.accent);
+        self.source = Some(0);
+        match self.options.front_matter {
+            FrontMatterView::Hidden => return,
+            FrontMatterView::Collapsed => {
+                let mut pieces = vec![
+                    Piece::text("▸ ", accent),
+                    Piece::text("front matter", self.theme.muted()),
+                ];
+                let keys = meta.keys();
+                if !keys.is_empty() {
+                    pieces.push(Piece::text(
+                        format!(": {}", keys.join(", ")),
+                        self.theme.faint(),
+                    ));
+                }
+                for line in wrap(&pieces, self.avail()) {
+                    self.emit_line(line);
+                }
+            }
+            FrontMatterView::Expanded => {
+                self.emit(vec![
+                    Span::styled("▾ ", accent),
+                    Span::styled("front matter", self.theme.muted()),
+                ]);
+                self.code_block(Some(meta.language()), &meta.text);
+            }
+        }
+        self.blank();
     }
 
     fn heading(&mut self, level: u8, content: &[Inline]) {
@@ -242,10 +382,78 @@ impl Renderer<'_> {
     }
 
     fn paragraph(&mut self, content: &[Inline]) {
+        if let Some((alt, url)) = sole_image(content)
+            && let Some((cols, rows)) = self.image_cells(url)
+        {
+            self.image(alt, url, cols, rows);
+            return;
+        }
+        if let Some(source) = sole_display_math(content) {
+            self.display_math(source);
+            return;
+        }
         let pieces = self.inlines(content, self.base);
         for line in wrap(&pieces, self.avail()) {
             self.emit_line(line);
         }
+    }
+
+    fn image_cells(&self, url: &str) -> Option<(u16, u16)> {
+        let sizes = self.options.images.as_ref()?;
+        let &(w, h) = sizes.sizes.get(url)?;
+        let (fw, fh) = (sizes.font.0.max(1) as f64, sizes.font.1.max(1) as f64);
+        let avail = self.avail() as f64;
+        let (w, h) = (w.max(1) as f64, h.max(1) as f64);
+        let mut scale: f64 = 1.0;
+        if w / fw > avail {
+            scale = avail * fw / w;
+        }
+        if (h * scale / fh).ceil() > MAX_IMAGE_ROWS as f64 {
+            scale = MAX_IMAGE_ROWS as f64 * fh / h;
+        }
+        let cols = (w * scale / fw).ceil().min(avail).max(1.0) as u16;
+        let rows = (h * scale / fh).ceil().clamp(1.0, MAX_IMAGE_ROWS as f64) as u16;
+        Some((cols, rows))
+    }
+
+    fn image(&mut self, alt: &[Inline], url: &str, cols: u16, rows: u16) {
+        let col: usize = self.prefix.iter().map(|s| width(&s.content)).sum();
+        self.out.images.push(ImageSlot {
+            line: self.out.lines.len(),
+            col: col as u16,
+            cols,
+            rows,
+            url: url.to_string(),
+        });
+        for _ in 0..rows {
+            self.emit(Vec::new());
+        }
+        let caption = plain_text(alt);
+        if !caption.trim().is_empty() {
+            let pieces = [
+                Piece::text("▣ ", Style::new().fg(self.theme.accent)),
+                Piece::text(caption, self.theme.faint().add_modifier(Modifier::ITALIC)),
+            ];
+            for line in wrap(&pieces, self.avail()) {
+                self.emit_line(line);
+            }
+        }
+    }
+
+    fn display_math(&mut self, source: &str) {
+        let style = self.theme.math();
+        let fence = self.theme.faint();
+        self.emit(vec![Span::styled("$$", fence)]);
+        for line in source.lines().filter(|l| !l.trim().is_empty()) {
+            let pieces = [Piece::text(
+                format!("  {}", line.replace('\t', "    ")),
+                style,
+            )];
+            for wrapped in wrap(&pieces, self.avail()) {
+                self.emit_line(wrapped);
+            }
+        }
+        self.emit(vec![Span::styled("$$", fence)]);
     }
 
     fn inlines(&self, inlines: &[Inline], style: Style) -> Vec<Piece> {
@@ -258,13 +466,13 @@ impl Renderer<'_> {
         &self,
         inlines: &[Inline],
         style: Style,
-        link: Option<&str>,
+        link: Option<&LinkRef>,
         out: &mut Vec<Piece>,
     ) {
         for inline in inlines {
             match inline {
                 Inline::Text(s) => {
-                    out.push(Piece::text(s.replace('\t', "    "), style).linked(link))
+                    out.push(Piece::text(s.replace('\t', "    "), style).with_link(link))
                 }
                 Inline::Code(s) => {
                     let text = if self.theme.mode == ColorMode::Mono {
@@ -272,7 +480,16 @@ impl Renderer<'_> {
                     } else {
                         format!(" {s} ")
                     };
-                    out.push(Piece::atomic(text, self.theme.code_inline()).linked(link));
+                    out.push(Piece::atomic(text, self.theme.code_inline()).with_link(link));
+                }
+                Inline::Math { display, source } => {
+                    let source = source.replace(['\n', '\t'], " ");
+                    let text = if *display {
+                        format!("$${source}$$")
+                    } else {
+                        format!("${source}$")
+                    };
+                    out.push(Piece::atomic(text, self.theme.math()).with_link(link));
                 }
                 Inline::Emphasis(c) => {
                     self.push_inlines(c, style.add_modifier(Modifier::ITALIC), link, out)
@@ -284,26 +501,45 @@ impl Renderer<'_> {
                     self.push_inlines(c, style.add_modifier(Modifier::CROSSED_OUT), link, out)
                 }
                 Inline::Link { content, url, .. } => {
-                    let target = Some(url.as_str());
+                    let target = LinkRef {
+                        url: url.clone(),
+                        kind: LinkKind::Url,
+                    };
+                    let target = Some(&target);
                     self.push_inlines(content, style.patch(self.theme.link()), target, out);
                     if !url.is_empty() && plain_text(content) != *url {
-                        out.push(Piece::text(" ", style).linked(target));
+                        out.push(Piece::text(" ", style).with_link(target));
                         out.push(
-                            Piece::text(format!("({url})"), self.theme.link_url()).linked(target),
+                            Piece::text(format!("({url})"), self.theme.link_url())
+                                .with_link(target),
                         );
                     }
                 }
+                Inline::WikiLink { target, content } => {
+                    let target = LinkRef {
+                        url: target.clone(),
+                        kind: LinkKind::Wiki,
+                    };
+                    self.push_inlines(content, style.patch(self.theme.link()), Some(&target), out);
+                }
                 Inline::Image { alt, url } => {
-                    out.push(Piece::text("▣ ", Style::new().fg(self.theme.accent)).linked(link));
+                    out.push(Piece::text("▣ ", Style::new().fg(self.theme.accent)).with_link(link));
                     self.push_inlines(alt, style.add_modifier(Modifier::ITALIC), link, out);
-                    out.push(Piece::text(format!(" ({url})"), self.theme.link_url()).linked(link));
+                    out.push(
+                        Piece::text(format!(" ({url})"), self.theme.link_url()).with_link(link),
+                    );
                 }
-                Inline::FootnoteRef(label) => out
-                    .push(Piece::atomic(footnote_label(label), self.theme.footnote()).linked(link)),
+                Inline::FootnoteRef(label) => {
+                    let piece = Piece::atomic(footnote_label(label), self.theme.footnote());
+                    out.push(match link {
+                        Some(_) => piece.with_link(link),
+                        None => piece.linked_as(label, LinkKind::Footnote),
+                    });
+                }
                 Inline::Html(s) => {
-                    out.push(Piece::text(s.clone(), self.theme.faint()).linked(link))
+                    out.push(Piece::text(s.clone(), self.theme.faint()).with_link(link))
                 }
-                Inline::SoftBreak => out.push(Piece::text(" ", style).linked(link)),
+                Inline::SoftBreak => out.push(Piece::text(" ", style).with_link(link)),
                 Inline::HardBreak => out.push(Piece::Break),
             }
         }
@@ -397,16 +633,45 @@ impl Renderer<'_> {
         }
     }
 
-    fn quote(&mut self, blocks: &[Block]) {
+    fn quote(&mut self, alert: Option<Alert>, blocks: &[Block]) {
         let base = self.base;
         let tight = self.tight;
-        self.push_prefix(Span::styled("▎ ", self.theme.quote_bar()));
-        self.base = self.theme.quote();
+        match alert {
+            Some(kind) => {
+                self.push_prefix(Span::styled("▎ ", self.theme.alert_bar(kind)));
+                self.emit(vec![Span::styled(
+                    format!("{} {}", kind.icon(), kind.label()),
+                    self.theme.alert_title(kind),
+                )]);
+                self.base = self.theme.text();
+            }
+            None => {
+                self.push_prefix(Span::styled("▎ ", self.theme.quote_bar()));
+                self.base = self.theme.quote();
+            }
+        }
         self.tight = false;
         self.blocks(blocks);
         self.tight = tight;
         self.base = base;
         self.pop_prefix();
+    }
+
+    fn definitions(&mut self, defs: &[Definition]) {
+        for (i, def) in defs.iter().enumerate() {
+            if i > 0 {
+                self.blank();
+            }
+            let term = self.inlines(&def.term, self.base.add_modifier(Modifier::BOLD));
+            for line in wrap(&term, self.avail()) {
+                self.emit_line(line);
+            }
+            for detail in &def.details {
+                self.push_prefix(Span::raw("    "));
+                self.blocks(detail);
+                self.pop_prefix();
+            }
+        }
     }
 
     fn list(&mut self, list: &List) {
@@ -572,6 +837,7 @@ impl Renderer<'_> {
                         start: l.start + col,
                         end: l.end + col,
                         url: l.url.clone(),
+                        kind: l.kind,
                     }));
                 }
                 col += used;
@@ -684,7 +950,7 @@ fn truncate(spans: Vec<Span<'static>>, max: usize) -> Vec<Span<'static>> {
     out
 }
 
-fn footnote_label(label: &str) -> String {
+pub fn footnote_label(label: &str) -> String {
     const SUPERSCRIPT: [char; 10] = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'];
     if !label.is_empty() && label.bytes().all(|b| b.is_ascii_digit()) {
         label

@@ -1,5 +1,6 @@
 mod draw;
 mod finder;
+mod images;
 pub mod keys;
 mod outline;
 mod search;
@@ -19,12 +20,14 @@ use crossterm::execute;
 use ratatui::DefaultTerminal;
 use ratatui::layout::{Position, Rect};
 use ratatui::widgets::ListState;
+use ratatui_image::picker::Picker;
 
 use crate::markdown::{Document, parse};
 use crate::project::{Project, is_markdown};
-use crate::render::layout::{Layout, layout};
+use crate::render::layout::{FrontMatterView, Layout, Options, image_urls, layout_with};
 use crate::render::theme::Theme;
-use crate::render::wrap::width;
+use crate::render::wrap::{LinkKind, width};
+use images::Images;
 use search::Match;
 use watch::FileWatcher;
 
@@ -63,6 +66,7 @@ enum Mode {
     Toc,
     Search,
     Finder,
+    Footnote,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -213,6 +217,9 @@ pub struct App {
     help_scroll: usize,
     finder: finder::Finder,
     watcher: Option<FileWatcher>,
+    images: Images,
+    front_matter: FrontMatterView,
+    footnote: Option<String>,
     edit_request: bool,
     notice: Option<String>,
     quit: bool,
@@ -267,12 +274,24 @@ impl App {
             help_scroll: 0,
             finder: finder::Finder::new(),
             watcher,
+            images: Images::new(),
+            front_matter: FrontMatterView::Collapsed,
+            footnote: None,
             edit_request: false,
             notice: None,
             quit: false,
         };
         app.rebuild_files();
         app
+    }
+
+    pub fn set_picker(&mut self, picker: Picker) {
+        self.images.set_picker(picker);
+        self.layout_width = 0;
+    }
+
+    pub fn set_remote_images(&mut self, remote: bool) {
+        self.images.remote = remote;
     }
 
     pub fn set_sidebar(&mut self, outline: Option<bool>) {
@@ -297,6 +316,8 @@ impl App {
 
     pub fn run(mut self) -> Result<()> {
         let mut terminal = ratatui::try_init()?;
+        let picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
+        self.set_picker(picker);
         execute!(io::stdout(), EnableMouseCapture)?;
         let hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
@@ -612,6 +633,94 @@ impl App {
         self.restore(visit);
     }
 
+    fn activate_link(&mut self, index: usize) {
+        let Some(link) = self.layout.links.get(index) else {
+            return;
+        };
+        let (url, kind) = (link.url.clone(), link.kind);
+        match kind {
+            LinkKind::Url => self.follow(&url),
+            LinkKind::Wiki => self.follow_wiki(&url),
+            LinkKind::Footnote => self.open_footnote(&url),
+        }
+    }
+
+    fn open_footnote(&mut self, label: &str) {
+        if self.doc.footnotes.iter().any(|n| n.label == label) {
+            self.footnote = Some(label.to_string());
+            self.mode = Mode::Footnote;
+        } else {
+            self.notice = Some(format!("no footnote [{label}]"));
+        }
+    }
+
+    fn follow_wiki(&mut self, target: &str) {
+        let (name, anchor) = match target.split_once('#') {
+            Some((n, a)) => (n, Some(a.to_string())),
+            None => (target, None),
+        };
+        if name.is_empty() {
+            self.navigate(None, anchor);
+            return;
+        }
+        let wanted = wiki_key(name);
+        let in_project = self.project.as_ref().and_then(|project| {
+            project
+                .files()
+                .find(|e| {
+                    wiki_key(
+                        e.name
+                            .rsplit_once('.')
+                            .map_or(&e.name[..], |(stem, _)| stem),
+                    ) == wanted
+                        || e.title.as_deref().is_some_and(|t| wiki_key(t) == wanted)
+                })
+                .map(|e| project.absolute(&e.path))
+        });
+        let target = in_project.or_else(|| {
+            let base = self.base_dir();
+            let with_ext = if Path::new(name).extension().is_some() {
+                base.join(name)
+            } else {
+                base.join(format!("{name}.md"))
+            };
+            with_ext.is_file().then_some(with_ext)
+        });
+        match target {
+            Some(path) => {
+                let path = path.canonicalize().unwrap_or(path);
+                self.navigate(Some(path), anchor);
+            }
+            None => self.notice = Some(format!("no page named {name}")),
+        }
+    }
+
+    fn toggle_images(&mut self) {
+        if !self.images.available() {
+            self.notice = Some("images need a terminal".to_string());
+            return;
+        }
+        self.images.enabled = !self.images.enabled;
+        self.layout_width = 0;
+        self.notice = Some(if self.images.enabled {
+            format!("images on ({})", self.images.protocol_name())
+        } else {
+            "images off".to_string()
+        });
+    }
+
+    fn toggle_front_matter(&mut self) {
+        if self.doc.front_matter.is_none() {
+            self.notice = Some("no front matter".to_string());
+            return;
+        }
+        self.front_matter = match self.front_matter {
+            FrontMatterView::Expanded => FrontMatterView::Collapsed,
+            _ => FrontMatterView::Expanded,
+        };
+        self.layout_width = 0;
+    }
+
     fn follow(&mut self, url: &str) {
         if let Some(anchor) = url.strip_prefix('#') {
             self.navigate(None, Some(anchor.to_string()));
@@ -706,12 +815,29 @@ impl App {
         true
     }
 
+    fn base_dir(&self) -> PathBuf {
+        self.file
+            .as_deref()
+            .and_then(Path::parent)
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."))
+    }
+
     fn ensure_layout(&mut self, content_width: usize) {
         if content_width == self.layout_width {
             return;
         }
         let anchor = self.layout.source_at(self.scroll);
-        self.layout = layout(&self.doc, &self.theme, content_width);
+        let urls = image_urls(&self.doc);
+        let base = self.base_dir();
+        let options = Options {
+            front_matter: self.front_matter,
+            images: self.images.sizes(&urls, &base),
+        };
+        if let Some(notice) = self.images.notice.take() {
+            self.notice = Some(notice);
+        }
+        self.layout = layout_with(&self.doc, &self.theme, content_width, &options);
         self.layout_width = content_width;
         self.link = None;
         let tree = outline::Tree::new(&self.layout.headings);
@@ -946,6 +1072,10 @@ impl App {
             Mode::Toc => self.key_toc(key),
             Mode::Search => self.key_search(key),
             Mode::Finder => self.key_finder(key, ctrl),
+            Mode::Footnote => {
+                self.footnote = None;
+                self.mode = Mode::View;
+            }
         }
     }
 
@@ -956,10 +1086,7 @@ impl App {
             KeyCode::Esc if self.link.is_some() => self.link = None,
             KeyCode::Esc if !self.query.is_empty() => self.clear_search(),
             KeyCode::Esc => self.quit = true,
-            KeyCode::Enter if self.link.is_some() => {
-                let url = self.layout.links[self.link.unwrap()].url.clone();
-                self.follow(&url);
-            }
+            KeyCode::Enter if self.link.is_some() => self.activate_link(self.link.unwrap()),
             KeyCode::Char(']') => self.select_link(1),
             KeyCode::Char('[') => self.select_link(-1),
             KeyCode::Char('H') => self.go_back(),
@@ -995,6 +1122,8 @@ impl App {
             KeyCode::Char('p') if ctrl => self.open_finder(),
             KeyCode::Char('E') => self.edit_request = true,
             KeyCode::Char('r') => self.reload(),
+            KeyCode::Char('i') => self.toggle_images(),
+            KeyCode::Char('m') => self.toggle_front_matter(),
             _ => {}
         }
     }
@@ -1217,13 +1346,26 @@ impl App {
                         return;
                     }
                     let line = self.scroll + (mouse.row - y) as usize;
-                    if let Some(link) = self.layout.link_at(line, mouse.column - x) {
-                        let url = link.url.clone();
-                        self.follow(&url);
+                    let col = mouse.column - x;
+                    if let Some(index) = self
+                        .layout
+                        .links
+                        .iter()
+                        .position(|l| l.line == line && l.start <= col && col < l.end)
+                    {
+                        self.activate_link(index);
                     }
                 }
                 _ => {}
             }
         }
     }
+}
+
+fn wiki_key(text: &str) -> String {
+    text.trim()
+        .to_lowercase()
+        .chars()
+        .map(|c| if c == ' ' || c == '_' { '-' } else { c })
+        .collect()
 }

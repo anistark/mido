@@ -2,6 +2,23 @@
 
 All notable changes to mido are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com), and versions follow semver. Before 1.0, a minor release may change keys or configuration.
 
+## [0.4.0] - Unreleased
+
+### Added
+
+- Images: `![alt](path)` on its own line is drawn through Kitty, iTerm2 or Sixel, with half-block characters everywhere else. Local files always load, remote ones with `--remote-images`, cached in the user cache directory with a 10 MB cap. `i` hides and shows them, the alt text becomes a caption, and print mode keeps the placeholder.
+- GitHub alerts: `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` and `[!CAUTION]` blockquotes draw a colored bar, an icon and a label.
+- Front matter in YAML or TOML shows as one collapsed line listing its keys. `m` expands it into a highlighted card.
+- Wikilinks: `[[Page]]` and `[[page#section|label]]` open the file in the folder whose name or first heading matches, or `page.md` next to the current file.
+- Emoji shortcodes such as `:tada:` render as emoji.
+- Math: `$..$` shows as styled source, and a `$$` block on its own renders as a fenced block.
+- Definition lists render with bold terms and indented definitions.
+- Footnotes: select a reference with `]` or `[` and press Enter to read the note in a popup.
+
+### Changed
+
+- `]` and `[` also stop on wikilinks and footnote references, and the help lists `i` and `m`.
+
 ## [0.3.0] - Unreleased
 
 ### Added

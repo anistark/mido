@@ -7,9 +7,12 @@ use ratatui::widgets::{
     Block, BorderType, Clear, List, ListItem, ListState, Paragraph, Scrollbar,
     ScrollbarOrientation, ScrollbarState, StatefulWidget, Widget,
 };
+use ratatui_image::sliced::{SignedPosition, SlicedImage};
 
 use super::keys::{self, SECTIONS};
 use super::{App, Focus, Mode, Panel};
+use crate::markdown::Document;
+use crate::render::layout::{footnote_label, layout};
 use crate::render::theme::ColorMode;
 use crate::render::wrap::{Piece, width, wrap};
 
@@ -87,6 +90,7 @@ impl App {
                     .set_style(self.theme.faint());
             }
         }
+        self.draw_images(buf, x, content_area.y, content_width as u16);
         self.draw_matches(buf, x, content_area.y, content_width as u16);
         if let Some(link) = self.link.and_then(|i| self.layout.links.get(i))
             && link.line >= self.scroll
@@ -130,8 +134,62 @@ impl App {
             Mode::Help => self.draw_help(buf, body),
             Mode::Toc => self.draw_toc(buf, area),
             Mode::Finder => self.draw_finder(buf, area),
+            Mode::Footnote => self.draw_footnote(buf, area),
             _ => {}
         }
+    }
+
+    fn draw_images(&mut self, buf: &mut Buffer, x: u16, y: u16, width: u16) {
+        if !self.images.active() || self.layout.images.is_empty() {
+            return;
+        }
+        let base = self.base_dir();
+        let area = Rect {
+            x,
+            y,
+            width,
+            height: self.view_height as u16,
+        };
+        let slots = self.layout.images.clone();
+        for slot in slots {
+            let top = slot.line as i64 - self.scroll as i64;
+            if top + slot.rows as i64 <= 0 || top >= self.view_height as i64 {
+                continue;
+            }
+            if let Some(protocol) = self.images.protocol(&slot.url, &base, slot.cols, slot.rows) {
+                let position = SignedPosition {
+                    x: slot.col as i16,
+                    y: top as i16,
+                };
+                SlicedImage::new(protocol, position).render(area, buf);
+            }
+        }
+    }
+
+    fn draw_footnote(&mut self, buf: &mut Buffer, area: Rect) {
+        let Some(note) = self
+            .footnote
+            .as_ref()
+            .and_then(|label| self.doc.footnotes.iter().find(|n| n.label == *label))
+        else {
+            return;
+        };
+        let doc = Document {
+            front_matter: None,
+            blocks: note.blocks.clone(),
+            footnotes: Vec::new(),
+        };
+        let w = area.width.saturating_sub(6).clamp(20, 72);
+        let out = layout(&doc, &self.theme, w.saturating_sub(4).max(8) as usize);
+        let h = (out.lines.len() as u16 + 2).min(area.height.saturating_sub(2).max(3));
+        let popup = centered(area, w, h);
+        Clear.render(popup, buf);
+        let block = self
+            .popup_block(&format!(" Footnote {} ", footnote_label(&note.label)))
+            .title_bottom(self.hint(" any key closes "));
+        Paragraph::new(out.lines)
+            .block(block.padding(ratatui::widgets::Padding::horizontal(1)))
+            .render(popup, buf);
     }
 
     fn draw_finder(&mut self, buf: &mut Buffer, area: Rect) {

@@ -40,8 +40,11 @@ fn blocks_have_html(blocks: &[Block]) -> bool {
         BlockKind::Heading { content, .. } | BlockKind::Paragraph(content) => {
             inlines_have_html(content)
         }
-        BlockKind::BlockQuote(inner) => blocks_have_html(inner),
+        BlockKind::BlockQuote { blocks, .. } => blocks_have_html(blocks),
         BlockKind::List(list) => list.items.iter().any(|item| blocks_have_html(&item.blocks)),
+        BlockKind::DefinitionList(defs) => defs.iter().any(|def| {
+            inlines_have_html(&def.term) || def.details.iter().any(|d| blocks_have_html(d))
+        }),
         BlockKind::Table(table) => table
             .header
             .iter()

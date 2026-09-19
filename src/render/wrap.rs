@@ -2,13 +2,27 @@ use ratatui::style::Style;
 use ratatui::text::Span;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LinkKind {
+    #[default]
+    Url,
+    Wiki,
+    Footnote,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkRef {
+    pub url: String,
+    pub kind: LinkKind,
+}
+
 #[derive(Debug, Clone)]
 pub enum Piece {
     Text {
         text: String,
         style: Style,
         atomic: bool,
-        link: Option<String>,
+        link: Option<LinkRef>,
     },
     Break,
 }
@@ -34,7 +48,27 @@ impl Piece {
 
     pub fn linked(mut self, url: Option<&str>) -> Self {
         if let Piece::Text { link, .. } = &mut self {
-            *link = url.map(str::to_string);
+            *link = url.map(|url| LinkRef {
+                url: url.to_string(),
+                kind: LinkKind::Url,
+            });
+        }
+        self
+    }
+
+    pub fn with_link(mut self, link: Option<&LinkRef>) -> Self {
+        if let Piece::Text { link: slot, .. } = &mut self {
+            *slot = link.cloned();
+        }
+        self
+    }
+
+    pub fn linked_as(mut self, url: &str, kind: LinkKind) -> Self {
+        if let Piece::Text { link, .. } = &mut self {
+            *link = Some(LinkRef {
+                url: url.to_string(),
+                kind,
+            });
         }
         self
     }
@@ -51,6 +85,7 @@ pub struct LinkSpan {
     pub start: usize,
     pub end: usize,
     pub url: String,
+    pub kind: LinkKind,
 }
 
 pub fn width(s: &str) -> usize {
@@ -87,7 +122,7 @@ pub fn wrap(pieces: &[Piece], width: usize) -> Vec<Wrapped> {
                 for token in tokens(text) {
                     if token.starts_with(' ') {
                         w.end_word();
-                        w.space(token, *style, link.as_deref());
+                        w.space(token, *style, link.as_ref());
                     } else {
                         w.word.push((token.to_string(), *style, link.clone()));
                     }
@@ -124,7 +159,7 @@ struct Wrapper {
     cur: Vec<Span<'static>>,
     cur_links: Vec<LinkSpan>,
     cur_width: usize,
-    word: Vec<(String, Style, Option<String>)>,
+    word: Vec<(String, Style, Option<LinkRef>)>,
 }
 
 impl Wrapper {
@@ -161,23 +196,28 @@ impl Wrapper {
         self.cur_width = 0;
     }
 
-    fn push(&mut self, text: &str, style: Style, link: Option<&str>) {
+    fn push(&mut self, text: &str, style: Style, link: Option<&LinkRef>) {
         let start = self.cur_width;
         self.cur_width += width(text);
         self.cur.push(Span::styled(text.to_string(), style));
-        if let Some(url) = link {
+        if let Some(link) = link {
             match self.cur_links.last_mut() {
-                Some(last) if last.url == url && last.end == start => last.end = self.cur_width,
+                Some(last)
+                    if last.url == link.url && last.kind == link.kind && last.end == start =>
+                {
+                    last.end = self.cur_width
+                }
                 _ => self.cur_links.push(LinkSpan {
                     start,
                     end: self.cur_width,
-                    url: url.to_string(),
+                    url: link.url.clone(),
+                    kind: link.kind,
                 }),
             }
         }
     }
 
-    fn space(&mut self, text: &str, style: Style, link: Option<&str>) {
+    fn space(&mut self, text: &str, style: Style, link: Option<&LinkRef>) {
         if self.cur_width > 0 {
             self.push(text, style, link);
         }
@@ -194,7 +234,7 @@ impl Wrapper {
         }
         if total <= self.width {
             for (text, style, link) in &word {
-                self.push(text, *style, link.as_deref());
+                self.push(text, *style, link.as_ref());
             }
             return;
         }
@@ -206,7 +246,7 @@ impl Wrapper {
                 if self.cur_width + chunk_width + cw > self.width
                     && self.cur_width + chunk_width > 0
                 {
-                    self.push(&chunk, *style, link.as_deref());
+                    self.push(&chunk, *style, link.as_ref());
                     self.flush();
                     chunk.clear();
                     chunk_width = 0;
@@ -214,7 +254,7 @@ impl Wrapper {
                 chunk.push(ch);
                 chunk_width += cw;
             }
-            self.push(&chunk, *style, link.as_deref());
+            self.push(&chunk, *style, link.as_ref());
         }
     }
 }
@@ -245,7 +285,8 @@ mod tests {
             [LinkSpan {
                 start: 4,
                 end: 12,
-                url: "docs.md".into()
+                url: "docs.md".into(),
+                kind: LinkKind::Url,
             }]
         );
         assert_eq!(
@@ -253,7 +294,8 @@ mod tests {
             [LinkSpan {
                 start: 0,
                 end: 9,
-                url: "docs.md".into()
+                url: "docs.md".into(),
+                kind: LinkKind::Url,
             }]
         );
     }

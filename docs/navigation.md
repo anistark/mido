@@ -17,6 +17,8 @@ Everything that moves you around a document or a folder: links, history, the fil
 | Target | Result |
 | --- | --- |
 | A relative Markdown file, like `guide/keys.md` | Opens in place |
+| A wikilink, like `[[Getting Started]]` or `[[keys#reading\|label]]` | Opens the file in the folder whose name or first heading matches, or `name.md` next to the current file |
+| A footnote marker | Opens the note in a popup |
 | An anchor, like `#install` | Jumps to that heading, using GitHub's slug rules |
 | A folder | Opens its README |
 | Any other file | Opens with the system opener |

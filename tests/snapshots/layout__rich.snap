@@ -1,0 +1,36 @@
+---
+source: tests/layout.rs
+expression: "render(name, 60).join(\"\\n\")"
+---
+▸ front matter: title, tags
+
+ Rich content 
+
+▎ ● Note
+▎ Notes carry a blue bar.
+
+▎ ▲ Warning
+▎ Warnings carry a yellow one, and the body wraps like any
+▎ paragraph would when it runs long enough.
+
+See Getting Started and the keys for more, then celebrate 🎉
+with $e = mc^2$ inline.
+
+$$
+\int_0^1 x^2 \, dx = \frac{1}{3}
+$$
+
+Term
+    The first meaning.
+    A second meaning.
+
+Another term
+    Its meaning.
+
+▣ A tiny square (images/tiny.png)
+
+A reference¹ to a footnote.
+
+────────────────────────────────────────────────────────────
+
+¹ The footnote body.

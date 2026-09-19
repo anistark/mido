@@ -30,7 +30,7 @@ Without `-p`, output that is not a terminal is written as plain text, so `mido f
 
 ## Do images show?
 
-Not yet. An image renders as a placeholder with its alt text and path. Inline images through the terminal image protocols are planned.
+Yes, when the image sits on its own line. Kitty, iTerm2 and Sixel terminals draw the real picture, and everything else gets a half-block rendering. Press `i` to hide them, or to see which protocol mido detected. Remote images need `--remote-images`.
 
 ## Does it run on Windows?
 
@@ -42,4 +42,4 @@ Yes. `mido docs` opens this documentation from a copy bundled in the binary, so 
 
 ## Where is the config file?
 
-There is none yet. Themes, fonts and configuration are the theme of the 0.4 release. Until then the defaults are the design.
+There is none yet. Themes, fonts and configuration are the theme of the 0.5 release. Until then the defaults are the design.

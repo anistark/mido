@@ -1,5 +1,7 @@
 use ratatui::style::{Color, Modifier, Style};
 
+use crate::markdown::Alert;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorMode {
     TrueColor,
@@ -34,6 +36,12 @@ pub struct Theme {
     pub search_current_bg: Color,
     pub overlay_border: Color,
     pub selected_bg: Color,
+    pub alert_note: Color,
+    pub alert_tip: Color,
+    pub alert_important: Color,
+    pub alert_warning: Color,
+    pub alert_caution: Color,
+    pub math: Color,
 }
 
 impl Theme {
@@ -42,18 +50,19 @@ impl Theme {
         let fg_muted = Color::Rgb(166, 173, 200);
         let fg_faint = Color::Rgb(108, 112, 134);
         let blue = Color::Rgb(137, 180, 250);
+        let mint = Color::Rgb(92, 255, 176);
+        let aqua = Color::Rgb(98, 232, 226);
         let mauve = Color::Rgb(203, 166, 247);
-        let teal = Color::Rgb(148, 226, 213);
         let surface = Color::Rgb(69, 71, 90);
         Self {
             mode: ColorMode::TrueColor,
             fg,
             fg_muted,
             fg_faint,
-            accent: blue,
-            headings: [blue, mauve, teal, fg, fg_muted, fg_muted],
-            h1_fg: Color::Rgb(30, 30, 46),
-            link: Color::Rgb(137, 220, 235),
+            accent: mint,
+            headings: [mint, aqua, mauve, fg, fg_muted, fg_muted],
+            h1_fg: Color::Rgb(6, 15, 12),
+            link: aqua,
             link_url: fg_faint,
             code_fg: Color::Rgb(250, 179, 135),
             code_bg: Color::Rgb(36, 38, 54),
@@ -63,14 +72,20 @@ impl Theme {
             quote_fg: fg_muted,
             rule: surface,
             table_border: Color::Rgb(88, 91, 112),
-            list_marker: blue,
+            list_marker: mint,
             status_bg: Color::Rgb(49, 50, 68),
             status_fg: fg,
             search_bg: Color::Rgb(249, 226, 175),
             search_fg: Color::Rgb(30, 30, 46),
             search_current_bg: Color::Rgb(250, 179, 135),
-            overlay_border: blue,
+            overlay_border: mint,
             selected_bg: Color::Rgb(49, 50, 68),
+            alert_note: blue,
+            alert_tip: Color::Rgb(166, 227, 161),
+            alert_important: mauve,
+            alert_warning: Color::Rgb(249, 226, 175),
+            alert_caution: Color::Rgb(243, 139, 168),
+            math: Color::Rgb(245, 194, 231),
         }
     }
 
@@ -128,6 +143,12 @@ impl Theme {
             &mut self.search_current_bg,
             &mut self.overlay_border,
             &mut self.selected_bg,
+            &mut self.alert_note,
+            &mut self.alert_tip,
+            &mut self.alert_important,
+            &mut self.alert_warning,
+            &mut self.alert_caution,
+            &mut self.math,
         ] {
             *c = f(*c);
         }
@@ -237,6 +258,30 @@ impl Theme {
 
     pub fn footnote(&self) -> Style {
         Style::new().fg(self.accent)
+    }
+
+    pub fn alert(&self, alert: Alert) -> Color {
+        match alert {
+            Alert::Note => self.alert_note,
+            Alert::Tip => self.alert_tip,
+            Alert::Important => self.alert_important,
+            Alert::Warning => self.alert_warning,
+            Alert::Caution => self.alert_caution,
+        }
+    }
+
+    pub fn alert_bar(&self, alert: Alert) -> Style {
+        Style::new().fg(self.alert(alert))
+    }
+
+    pub fn alert_title(&self, alert: Alert) -> Style {
+        Style::new()
+            .fg(self.alert(alert))
+            .add_modifier(Modifier::BOLD)
+    }
+
+    pub fn math(&self) -> Style {
+        Style::new().fg(self.math).add_modifier(Modifier::ITALIC)
     }
 
     pub fn status_chip(&self) -> Style {

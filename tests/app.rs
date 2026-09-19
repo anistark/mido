@@ -559,3 +559,76 @@ fn long_panel_entries_wrap_and_stay_clickable() {
     );
     assert!(screen(&mut app, &mut terminal).contains("Found it"));
 }
+
+#[test]
+fn footnote_popup_and_front_matter_toggle() {
+    let text = std::fs::read_to_string("tests/fixtures/rich.md").unwrap();
+    let mut app = App::new(Source::Stdin, &text, None);
+    let mut terminal = Terminal::new(TestBackend::new(80, 30)).unwrap();
+    let out = screen(&mut app, &mut terminal);
+    assert!(out.contains("▸ front matter: title, tags"), "{out}");
+
+    press(&mut app, KeyCode::Char('m'));
+    let out = screen(&mut app, &mut terminal);
+    assert!(
+        out.contains("▾ front matter") && out.contains("title: Rich content"),
+        "{out}"
+    );
+    press(&mut app, KeyCode::Char('m'));
+    assert!(screen(&mut app, &mut terminal).contains("▸ front matter"));
+
+    for _ in 0..3 {
+        press(&mut app, KeyCode::Char(']'));
+    }
+    press(&mut app, KeyCode::Enter);
+    let out = screen(&mut app, &mut terminal);
+    assert!(
+        out.contains("Footnote ¹") && out.contains("The footnote body."),
+        "footnote popup:\n{out}"
+    );
+    press(&mut app, KeyCode::Esc);
+    assert!(!screen(&mut app, &mut terminal).contains("Footnote ¹"));
+}
+
+#[test]
+fn images_render_as_halfblocks_and_toggle_off() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join("images")).unwrap();
+    let mut pixels = image::RgbImage::new(40, 40);
+    for (_, y, p) in pixels.enumerate_pixels_mut() {
+        *p = if (y / 10) % 2 == 0 {
+            image::Rgb([255, 0, 0])
+        } else {
+            image::Rgb([0, 0, 255])
+        };
+    }
+    pixels.save(dir.path().join("images/tiny.png")).unwrap();
+    let page = dir.path().join("page.md");
+    std::fs::write(
+        &page,
+        "# Pictures\n\n![A tiny square](images/tiny.png)\n\nAfter the picture.\n",
+    )
+    .unwrap();
+
+    let text = std::fs::read_to_string(&page).unwrap();
+    let mut app = App::new(Source::File(page), &text, None);
+    app.set_picker(ratatui_image::picker::Picker::halfblocks());
+    let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    let out = screen(&mut app, &mut terminal);
+    assert!(
+        out.contains('▀') || out.contains('▄'),
+        "halfblocks should be drawn:\n{out}"
+    );
+    assert!(
+        out.contains("A tiny square") && !out.contains("(images/tiny.png)"),
+        "{out}"
+    );
+    assert!(out.contains("After the picture."), "{out}");
+
+    press(&mut app, KeyCode::Char('i'));
+    let out = screen(&mut app, &mut terminal);
+    assert!(
+        !out.contains('▀') && !out.contains('▄') && out.contains("(images/tiny.png)"),
+        "placeholder after toggling images off:\n{out}"
+    );
+}

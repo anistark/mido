@@ -20,6 +20,7 @@ mido [OPTIONS] [PATH]
 | --- | --- |
 | `-p`, `--print` | Print styled text to stdout instead of opening the viewer |
 | `-w`, `--width <COLS>` | Cap the content width in columns. The default is the full terminal width |
+| `--remote-images` | Download remote images, cached in the user cache directory with a 10 MB cap |
 | `--man` | Print the man page as roff to stdout |
 | `-h`, `--help` | Show the help |
 | `-V`, `--version` | Show the version |
@@ -39,6 +40,10 @@ mido docs               # read this documentation offline
 ## Width
 
 By default the text runs the full width of the terminal, with small gutters on each side. `--width` caps the measure and centers the column, for anyone who prefers a fixed reading width on a wide screen.
+
+## Images
+
+Local images render without any flag. Remote ones, `http` and `https` URLs, are skipped unless `--remote-images` is given, because opening a document should never make a network request by surprise. Downloads are capped at 10 MB and cached, so a page opens quickly the second time. See [What renders](rendering.md#images) for the terminals that draw pictures.
 
 ## Print mode
 

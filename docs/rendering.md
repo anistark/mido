@@ -24,18 +24,48 @@ mido parses CommonMark plus the GitHub extensions and draws every element with i
 - Paragraphs wrap at the measure, with one blank line between blocks.
 - *Emphasis*, **strong** and ~~strikethrough~~ use the terminal's italic, bold and crossed-out attributes, and fall back to color where an attribute is missing.
 - `Inline code` sits on a tinted background with a space of padding each side.
-- Links are underlined, with the URL shown dim after the text.
-- Images show as a placeholder with their alt text and path.
-- Footnote markers are superscript digits, and the definitions collect after a rule at the end of the document.
+- Links are underlined, with the URL shown dim after the text. Wikilinks like `[[Page]]` are underlined without a URL.
+- Emoji shortcodes such as `:tada:` become the emoji, using GitHub's shortcode table.
+- Math in `$..$` is shown as styled source, delimiters included, so nothing is guessed.
+- Footnote markers are superscript digits, and the definitions collect after a rule at the end of the document. Select a marker with `]` and press `Enter` to read the note in a popup.
 - Smart punctuation turns straight quotes and dashes into their typographic forms.
 
 ## Lists
 
 Nested lists use `•`, `◦` and `▪` by depth, with the markers colored by depth. Ordered lists keep the numbers from the source. Task lists draw `☐` and `☑`, with done items muted.
 
-## Blockquotes
+## Blockquotes and alerts
 
 A bar in the quote color runs down the left with the text in italic. Nested quotes add a bar per level.
+
+GitHub alerts are blockquotes that start with `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]`. Each kind gets its own color for the bar, an icon and a label on the first line, and the body stays upright:
+
+```markdown
+> [!WARNING]
+> Ctrl-c leaves the viewer without asking.
+```
+
+## Definition lists
+
+A term on its own line followed by lines starting with `: ` renders the term in bold and each definition indented beneath it.
+
+## Images
+
+An image on its own line is drawn in the terminal. mido queries the terminal for a graphics protocol at startup and uses Kitty, iTerm2 or Sixel when one answers, falling back to half-block characters everywhere else, including over SSH and inside tmux. The picture is scaled to the measure, at most 40 rows tall, and the alt text becomes a caption under it. `i` hides and shows images, and the notice names the protocol in use.
+
+Local files resolve relative to the document. Remote images are off by default. Start mido with `--remote-images` to fetch them, capped at 10 MB each and cached in the user cache directory.
+
+Images inside a sentence, images that fail to load and every image in print mode show as a placeholder with the alt text and path.
+
+## Display math
+
+A `$$` block on its own renders as a fenced block of styled source:
+
+```markdown
+$$
+\int_0^1 x^2 \, dx = \frac{1}{3}
+$$
+```
 
 ## Code
 
@@ -92,4 +122,26 @@ Flowcharts, sequence, class and state diagrams go through mmdflux. Pie, gantt, m
 
 ## Front matter
 
-A YAML front matter block at the top of a file is skipped, so files written for a static site generator read cleanly. The pages of this documentation are an example.
+A YAML (`---`) or TOML (`+++`) block at the top of a file is kept out of the text and shown as one collapsed line listing its keys. `m` expands it into a highlighted card and collapses it again. The pages of this documentation carry front matter for the site generator, so they are an example.
+
+## What GitHub renders, and what mido does
+
+| Element | mido |
+| --- | --- |
+| Headings, paragraphs, emphasis, strong, strikethrough | Rendered |
+| Inline code, fenced and indented code, syntax highlighting | Rendered |
+| Links, autolinks, reference links | Rendered, URL shown dim |
+| Wikilinks | Rendered, resolved in the folder |
+| Images | Rendered in Kitty, iTerm2, Sixel and half-block terminals, placeholder in print mode |
+| Lists, ordered lists, task lists | Rendered |
+| Definition lists | Rendered |
+| Blockquotes | Rendered |
+| Alerts | Rendered with bar, icon and label |
+| Tables with alignment | Rendered |
+| Footnotes | Rendered, with a popup for the note |
+| Emoji shortcodes | Rendered |
+| Mermaid diagrams | Rendered as text for the supported types, source with a label otherwise |
+| Math | Fallback, shown as styled source |
+| Front matter | Rendered as a collapsible card |
+| Raw HTML | Fallback, shown as faint source |
+| Thematic breaks | Rendered |

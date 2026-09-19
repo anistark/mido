@@ -20,6 +20,10 @@ pub struct Cli {
     #[arg(short, long, value_name = "COLS")]
     pub width: Option<usize>,
 
+    /// Download remote images, cached in the user cache dir with a 10 MB cap
+    #[arg(long)]
+    pub remote_images: bool,
+
     /// Print the man page as roff to stdout
     #[arg(long)]
     pub man: bool,

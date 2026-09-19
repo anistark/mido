@@ -45,6 +45,10 @@ export default function (eleventyConfig) {
   eleventyConfig.addPlugin(syntaxHighlight);
   eleventyConfig.addPlugin(HtmlBasePlugin);
   eleventyConfig.addPassthroughCopy("assets");
+  eleventyConfig.addPassthroughCopy({
+    "../assets/icon.svg": "assets/img/icon.svg",
+    "../assets/icon-1024.png": "assets/img/icon-1024.png",
+  });
   eleventyConfig.addWatchTarget("assets");
 
   eleventyConfig.addCollection("docs", (api) =>

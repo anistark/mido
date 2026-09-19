@@ -12,6 +12,8 @@ pub const SECTIONS: &[Section] = &[
             ("`Ctrl-f` / `Ctrl-b`, `Space`", "Page down / up"),
             ("`g` / `G`", "Top / bottom"),
             ("`t`", "Table of contents"),
+            ("`i`", "Show or hide images"),
+            ("`m`", "Expand or collapse the front matter"),
             ("`r`", "Reload the file"),
         ],
     },
@@ -39,7 +41,10 @@ pub const SECTIONS: &[Section] = &[
         title: "Links and history",
         bindings: &[
             ("`]` / `[`", "Select the next / previous link"),
-            ("`Enter`, click", "Follow the selected link"),
+            (
+                "`Enter`, click",
+                "Follow the selected link or open a footnote",
+            ),
             ("`H` / `L`", "Back / forward through visited pages"),
             ("`Ctrl-p`", "Find a file in the folder"),
         ],

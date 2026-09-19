@@ -1,5 +1,7 @@
 # mido
 
+![The mido icon, a green prompt and md on a dark tile](assets/icon-256.png)
+
 **mido**: Markdown In, Document Out.
 
 A terminal Markdown reader that renders documents the way a good reader app does: real heading hierarchy, a comfortable line measure, syntax-highlighted code, and tables that line up. Built in Rust on [ratatui](https://ratatui.rs).
@@ -49,6 +51,8 @@ Piping without `-p` prints plain text, so `mido file.md > out.txt` never leaks e
 | `E` | Edit the file in `$EDITOR`, reload on return |
 | `/` then `n` / `N` | Search, next, previous |
 | `t` | Table of contents |
+| `i` | Show or hide images |
+| `m` | Expand or collapse the front matter |
 | `r` | Reload |
 | `h`, `?` | Help |
 | `q` | Quit |
@@ -62,7 +66,9 @@ On terminals wide enough an outline of the headings sits in a tinted card at the
 ## What renders
 
 - Headings, paragraphs, *emphasis*, **strong**, ~~strikethrough~~ and `inline code`
-- Links with their URL, images as placeholders, footnotes[^1]
+- Links with their URL, wikilinks, footnotes[^1] with a popup for the note
+- Images drawn in Kitty, iTerm2 and Sixel terminals, half-blocks elsewhere
+- GitHub alerts, front matter as a collapsible card, definition lists, emoji shortcodes, math as styled source
 - Nested lists, ordered lists, task lists
   - [x] like this one
   - [ ] and this one

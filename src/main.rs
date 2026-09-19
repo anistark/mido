@@ -38,7 +38,9 @@ fn main() -> Result<()> {
         return ansi::write(&out.lines, &mut io::stdout().lock(), color).map_err(Into::into);
     }
 
-    App::new(source, &text, cli.width).run()
+    let mut app = App::new(source, &text, cli.width);
+    app.set_remote_images(cli.remote_images);
+    app.run()
 }
 
 fn source(cli: &Cli) -> Result<Source> {
