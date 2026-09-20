@@ -23,7 +23,7 @@ use ratatui::widgets::ListState;
 use ratatui_image::picker::Picker;
 
 use crate::markdown::{Document, parse};
-use crate::project::{Project, is_markdown};
+use crate::project::{Project, display_path, is_markdown};
 use crate::render::layout::{FrontMatterView, Layout, Options, image_urls, layout_with};
 use crate::render::theme::Theme;
 use crate::render::wrap::{LinkKind, width};
@@ -495,11 +495,9 @@ impl App {
 
     fn title(&self) -> String {
         match (&self.project, &self.file) {
-            (Some(project), Some(file)) => file
-                .strip_prefix(&project.root)
-                .unwrap_or(file)
-                .display()
-                .to_string(),
+            (Some(project), Some(file)) => {
+                display_path(file.strip_prefix(&project.root).unwrap_or(file))
+            }
             (Some(project), None) => project
                 .root
                 .file_name()

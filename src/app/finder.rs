@@ -1,7 +1,7 @@
 use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
 use nucleo_matcher::{Config, Matcher, Utf32String};
 
-use crate::project::Project;
+use crate::project::{Project, display_path};
 
 const MAX_RESULTS: usize = 200;
 
@@ -43,7 +43,7 @@ impl Finder {
             .iter()
             .enumerate()
             .filter(|(_, e)| !e.is_dir)
-            .map(|(i, e)| (i, label(&e.path.display().to_string(), e.title.as_deref())))
+            .map(|(i, e)| (i, label(&display_path(&e.path), e.title.as_deref())))
             .collect();
         self.hits = if self.query.trim().is_empty() {
             candidates

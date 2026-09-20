@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
 use ignore::WalkBuilder;
 
@@ -25,6 +25,14 @@ pub fn is_markdown(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
         .is_some_and(|e| EXTENSIONS.iter().any(|x| x.eq_ignore_ascii_case(e)))
+}
+
+pub fn display_path(path: &Path) -> String {
+    let text = path.to_string_lossy();
+    if MAIN_SEPARATOR == '/' {
+        return text.into_owned();
+    }
+    text.replace(MAIN_SEPARATOR, "/")
 }
 
 impl Project {
@@ -266,5 +274,14 @@ mod tests {
             Some(PathBuf::from("b/z.md"))
         );
         assert_eq!(Project::scan(&dir.path().join("b")).entries.len(), 2);
+    }
+
+    #[test]
+    fn display_path_uses_forward_slashes() {
+        assert_eq!(
+            display_path(&Path::new("guide").join("faq.md")),
+            "guide/faq.md"
+        );
+        assert_eq!(display_path(Path::new("README.md")), "README.md");
     }
 }

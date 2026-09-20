@@ -1,3 +1,3 @@
 mod scan;
 
-pub use scan::{Entry, Project, is_markdown};
+pub use scan::{Entry, Project, display_path, is_markdown};
