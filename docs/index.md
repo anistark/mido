@@ -14,7 +14,7 @@ A terminal Markdown reader that renders documents the way a good reader app does
 ## Install
 
 ```sh
-cargo install --git https://github.com/anistark/mido
+cargo install mido
 ```
 
 Then open a file, or a whole folder:

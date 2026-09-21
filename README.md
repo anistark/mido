@@ -2,14 +2,27 @@
 
 ![The mido icon, a green prompt and md on a dark tile](assets/icon-256.png)
 
-**mido**: Markdown In, Document Out.
+[![crates.io](https://img.shields.io/crates/v/mido?logo=rust)](https://crates.io/crates/mido)
+[![downloads](https://img.shields.io/crates/d/mido)](https://crates.io/crates/mido)
+[![CI](https://github.com/anistark/mido/actions/workflows/ci.yml/badge.svg)](https://github.com/anistark/mido/actions/workflows/ci.yml)
+[![MSRV](https://img.shields.io/crates/msrv/mido)](https://crates.io/crates/mido)
+[![docs](https://img.shields.io/badge/docs-anistark.github.io%2Fmido-2ea44f)](https://anistark.github.io/mido)
+[![license](https://img.shields.io/crates/l/mido)](./LICENSE)
+
+_Markdown In, Document Out_
 
 A terminal Markdown reader that renders documents the way a good reader app does: real heading hierarchy, a comfortable line measure, syntax-highlighted code, and tables that line up. Built in Rust on [ratatui](https://ratatui.rs).
 
 ## Install
 
 ```sh
-cargo install --path .
+cargo install mido
+```
+
+That needs a Rust toolchain of 1.93 or newer. For the latest commit instead of the latest release:
+
+```sh
+cargo install --git https://github.com/anistark/mido
 ```
 
 ## Use

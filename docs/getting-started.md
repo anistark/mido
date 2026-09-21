@@ -12,7 +12,13 @@ mido reads Markdown in the terminal. Point it at a file and it renders the docum
 
 ## Install
 
-mido is a Rust crate. With a Rust toolchain of 1.93 or newer, install it straight from the repository:
+mido is on [crates.io](https://crates.io/crates/mido). With a Rust toolchain of 1.93 or newer:
+
+```sh
+cargo install mido
+```
+
+To build the latest commit instead of the latest release:
 
 ```sh
 cargo install --git https://github.com/anistark/mido
