@@ -2,7 +2,7 @@
 
 All notable changes to mido are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com), and versions follow semver. Before 1.0, a minor release may change keys or configuration.
 
-## [Unreleased]
+## [0.4.1] - 2026-09-21
 
 ### Added
 
