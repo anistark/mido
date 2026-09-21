@@ -1,10 +1,12 @@
 use std::collections::BTreeSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use clap::CommandFactory;
 use mido::markdown::parse;
 use mido::markdown::{Block, BlockKind, Inline};
+use mido::render::layout::layout;
+use mido::render::theme::Theme;
 
 fn pages() -> Vec<PathBuf> {
     let mut pages: Vec<PathBuf> = std::fs::read_dir("docs")
@@ -52,6 +54,117 @@ fn blocks_have_html(blocks: &[Block]) -> bool {
             .any(|cell| inlines_have_html(cell)),
         BlockKind::CodeBlock { .. } | BlockKind::Rule => false,
     })
+}
+
+fn inline_urls(inlines: &[Inline], out: &mut Vec<String>) {
+    for inline in inlines {
+        match inline {
+            Inline::Link { content, url, .. } => {
+                out.push(url.clone());
+                inline_urls(content, out);
+            }
+            Inline::Image { alt, url } => {
+                out.push(url.clone());
+                inline_urls(alt, out);
+            }
+            Inline::Emphasis(c) | Inline::Strong(c) | Inline::Strikethrough(c) => {
+                inline_urls(c, out)
+            }
+            _ => {}
+        }
+    }
+}
+
+fn block_urls(blocks: &[Block], out: &mut Vec<String>) {
+    for block in blocks {
+        match &block.kind {
+            BlockKind::Heading { content, .. } | BlockKind::Paragraph(content) => {
+                inline_urls(content, out)
+            }
+            BlockKind::BlockQuote { blocks, .. } => block_urls(blocks, out),
+            BlockKind::List(list) => list.items.iter().for_each(|i| block_urls(&i.blocks, out)),
+            BlockKind::DefinitionList(defs) => {
+                for def in defs {
+                    inline_urls(&def.term, out);
+                    def.details.iter().for_each(|d| block_urls(d, out));
+                }
+            }
+            BlockKind::Table(table) => table
+                .header
+                .iter()
+                .chain(table.rows.iter().flatten())
+                .for_each(|cell| inline_urls(cell, out)),
+            BlockKind::CodeBlock { .. } | BlockKind::Rule | BlockKind::Html(_) => {}
+        }
+    }
+}
+
+fn heading_slugs(page: &Path) -> Vec<String> {
+    let text = std::fs::read_to_string(page).unwrap();
+    layout(&parse(&text), &Theme::dark(), 80)
+        .headings
+        .into_iter()
+        .map(|h| h.slug)
+        .collect()
+}
+
+#[test]
+fn every_internal_link_in_the_docs_resolves() {
+    let mut corpus = pages();
+    corpus.extend(["README.md", "CONTRIBUTING.md", "CHANGELOG.md"].map(PathBuf::from));
+    let mut checked = 0;
+    let mut anchors = 0;
+    let mut failures = Vec::new();
+    for page in &corpus {
+        let doc = parse(&std::fs::read_to_string(page).unwrap());
+        let mut urls = Vec::new();
+        block_urls(&doc.blocks, &mut urls);
+        doc.footnotes
+            .iter()
+            .for_each(|note| block_urls(&note.blocks, &mut urls));
+        let base = page.parent().unwrap_or(Path::new("."));
+        for url in urls {
+            if url.contains("://") || url.starts_with("mailto:") || url.starts_with("tel:") {
+                continue;
+            }
+            checked += 1;
+            let (path_part, anchor) = url
+                .split_once('#')
+                .map_or((url.as_str(), None), |(p, a)| (p, Some(a)));
+            let mut target = if path_part.is_empty() {
+                page.clone()
+            } else {
+                base.join(path_part)
+            };
+            if target.is_dir() {
+                target = target.join("README.md");
+            }
+            if !target.is_file() {
+                failures.push(format!("{}: {url} is not a file", page.display()));
+                continue;
+            }
+            let Some(anchor) = anchor else { continue };
+            if target.extension().is_some_and(|ext| ext == "md") {
+                anchors += 1;
+                let slugs = heading_slugs(&target);
+                if !slugs.iter().any(|slug| slug == anchor) {
+                    failures.push(format!(
+                        "{}: {url} has no heading #{anchor}, headings are {slugs:?}",
+                        page.display()
+                    ));
+                }
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "broken links:\n{}",
+        failures.join("\n")
+    );
+    assert!(
+        checked >= 10 && anchors >= 3,
+        "checked {checked} links and {anchors} anchors"
+    );
 }
 
 #[test]

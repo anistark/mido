@@ -8,6 +8,7 @@ All notable changes to mido are recorded here. The format follows [Keep a Change
 
 - Badges render as labels: an image from shields.io, badgen, docs.rs, GitHub Actions and friends becomes a two-tone chip with the badge name and its value, linked like the badge. Static shields badges read their text from the URL, and `--remote-images` fetches live values from the badge SVG, so a version badge shows the version. The value side takes the badge's color, with dark or light text picked for contrast.
 - Front matter fields parse into key and value pairs for YAML and TOML, with lists joined by commas and nested tables flattened to dotted keys.
+- A test walks every relative link and anchor in the docs, README, CONTRIBUTING and CHANGELOG and fails on a broken one.
 
 ### Changed
 

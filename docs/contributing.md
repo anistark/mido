@@ -84,7 +84,7 @@ Run `cargo test`. A new or changed snapshot is written next to the old one as a 
 
 The keymap in `src/app/keys.rs` drives the help overlay and the [Keys](keys.md) page. After editing it run `just keys`, which regenerates the tables in `docs/keys.md`. A test compares the two and fails when they drift, and another checks that every command line flag appears in [Command line](cli.md).
 
-The docs pages are plain Markdown plus front matter. A test renders each one in print mode and rejects template syntax or raw HTML, because the same files are bundled into the binary for `mido docs`. After adding a page, run `touch build.rs` once so the bundle picks it up.
+The docs pages are plain Markdown plus front matter. A test renders each one in print mode and rejects template syntax or raw HTML, because the same files are bundled into the binary for `mido docs`. Another walks every relative link and `#anchor` across the docs, README, CONTRIBUTING and CHANGELOG and fails on one that does not land on a file or a heading. After adding a page, run `touch build.rs` once so the bundle picks it up.
 
 ## Before you open a pull request
 
