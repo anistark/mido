@@ -37,14 +37,29 @@ demo:
     cargo build --release
     PATH="{{justfile_directory()}}/target/release:$PATH" vhs docs/tapes/landing.tape
 
-publish: check
+version := `grep -m1 '^version = ' Cargo.toml | cut -d '"' -f 2`
+
+_gates:
     #!/usr/bin/env bash
     set -euo pipefail
-    version=$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f 2)
     branch=$(git branch --show-current)
-    [[ "$branch" == "main" ]] || { echo "publish from main, not $branch"; exit 1; }
+    [[ "$branch" == "main" ]] || { echo "release from main, not $branch"; exit 1; }
     [[ -z "$(git status --porcelain)" ]] || { echo "commit or stash your changes first"; exit 1; }
-    grep -Eq "^## \[$version\] - [0-9]{4}-[0-9]{2}-[0-9]{2}" CHANGELOG.md || { echo "CHANGELOG.md needs a dated ## [$version] section"; exit 1; }
+
+publish-crate: _gates
+    #!/usr/bin/env bash
+    set -euo pipefail
+    grep -Eq "^## \[{{version}}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}" CHANGELOG.md || { echo "CHANGELOG.md needs a dated ## [{{version}}] section"; exit 1; }
     cargo publish --dry-run
     cargo publish
-    echo "published mido $version, next: git tag v$version && git push origin main v$version"
+    echo "published mido {{version}}"
+
+gh-tag: _gates
+    #!/usr/bin/env bash
+    set -euo pipefail
+    git rev-parse -q --verify "refs/tags/v{{version}}" >/dev/null && { echo "v{{version}} already exists"; exit 1; }
+    git tag "v{{version}}"
+    git push origin main "v{{version}}"
+    echo "tagged and pushed v{{version}}"
+
+publish: check publish-crate gh-tag
