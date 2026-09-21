@@ -5,7 +5,16 @@ use mido::render::badge::BadgeText;
 use mido::render::layout::{FrontMatterView, ImageSizes, Options, layout, layout_with};
 use mido::render::theme::{ColorMode, Theme};
 use mido::render::wrap::LinkKind;
+use ratatui::style::Color;
 use unicode_width::UnicodeWidthStr;
+
+fn span<'a>(out: &'a mido::render::layout::Layout, content: &str) -> &'a ratatui::text::Span<'a> {
+    out.lines
+        .iter()
+        .flat_map(|line| line.spans.iter())
+        .find(|span| span.content == content)
+        .unwrap_or_else(|| panic!("no span {content:?}"))
+}
 
 fn render(name: &str, width: usize) -> Vec<String> {
     let text = std::fs::read_to_string(format!("tests/fixtures/{name}.md")).unwrap();
@@ -47,6 +56,11 @@ fn rich_content_links_and_front_matter() {
         kinds.contains(&(LinkKind::Url, "https://crates.io/crates/mido")),
         "{kinds:?}"
     );
+    let chip = span(&out, " anistark.github.io/mido ");
+    assert_eq!(chip.style.bg, Some(Color::Rgb(0x2e, 0xa4, 0x4f)));
+    assert_eq!(chip.style.fg, Some(Theme::dark().fg), "light text on green");
+    let name = span(&out, " docs ");
+    assert_eq!(name.style, Theme::dark().label());
     assert!(plain.contains("● Note") && plain.contains("▲ Warning"));
     assert!(plain.contains("🎉") && plain.contains("$e = mc^2$"));
     assert!(plain.contains("▣ A tiny square (images/tiny.png)"));
@@ -89,6 +103,8 @@ fn badges_take_fetched_values_and_mono_brackets() {
         BadgeText {
             label: "crates.io".to_string(),
             value: Some("v0.4.0".to_string()),
+            color: Some((0xdf, 0xb3, 0x17)),
+            ..BadgeText::default()
         },
     );
     let out = layout_with(
@@ -103,6 +119,13 @@ fn badges_take_fetched_values_and_mono_brackets() {
     );
     let plain = out.plain_lines().join("\n");
     assert!(plain.contains(" crates.io  v0.4.0 "), "{plain}");
+    let chip = span(&out, " v0.4.0 ");
+    assert_eq!(chip.style.bg, Some(Color::Rgb(0xdf, 0xb3, 0x17)));
+    assert_eq!(
+        chip.style.fg,
+        Some(Theme::dark().h1_fg),
+        "dark text on yellow"
+    );
 
     let mono = layout(&doc, &Theme::dark().with_mode(ColorMode::Mono), 60);
     let plain = mono.plain_lines().join("\n");

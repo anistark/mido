@@ -4,7 +4,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use unicode_width::UnicodeWidthChar;
 
-use super::badge::{self, BadgeText, Badges};
+use super::badge::{self, BadgeText, Badges, Rgb};
 use super::mermaid::{self, Kind};
 use super::syntax;
 use super::theme::{ColorMode, Theme};
@@ -329,7 +329,7 @@ impl Renderer<'_> {
                     if i > 0 {
                         pieces.push(Piece::text(" ", self.base));
                     }
-                    self.label_pieces(key, Some(value), None, &mut pieces);
+                    self.label_pieces(key, Some(value), (None, None), None, &mut pieces);
                 }
                 let mut first = self.prefix.clone();
                 first.push(Span::styled("▸ ", accent));
@@ -491,6 +491,7 @@ impl Renderer<'_> {
         &self,
         label: &str,
         value: Option<&str>,
+        colors: (Option<Rgb>, Option<Rgb>),
         link: Option<&LinkRef>,
         out: &mut Vec<Piece>,
     ) {
@@ -506,9 +507,16 @@ impl Renderer<'_> {
             out.push(Piece::atomic(text, self.theme.muted()).with_link(link));
             return;
         }
-        out.push(Piece::atomic(format!(" {label} "), self.theme.label()).with_link(link));
+        let label_style = colors
+            .0
+            .map_or_else(|| self.theme.label(), |rgb| self.theme.label_colored(rgb));
+        let value_style = colors.1.map_or_else(
+            || self.theme.label_value(),
+            |rgb| self.theme.label_colored(rgb),
+        );
+        out.push(Piece::atomic(format!(" {label} "), label_style).with_link(link));
         if let Some(value) = value {
-            out.push(Piece::atomic(format!(" {value} "), self.theme.label_value()).with_link(link));
+            out.push(Piece::atomic(format!(" {value} "), value_style).with_link(link));
         }
     }
 
@@ -518,10 +526,7 @@ impl Renderer<'_> {
         }
         let alt = plain_text(alt);
         let alt = alt.trim();
-        let mut text = badge::from_url(url).unwrap_or(BadgeText {
-            label: String::new(),
-            value: None,
-        });
+        let mut text = badge::from_url(url).unwrap_or_default();
         if text.label.is_empty() {
             text.label = if alt.is_empty() { "badge" } else { alt }.to_string();
         }
@@ -598,7 +603,13 @@ impl Renderer<'_> {
                 }
                 Inline::Image { alt, url } if badge::is_badge(url) => {
                     let text = self.badge_text(alt, url);
-                    self.label_pieces(&text.label, text.value.as_deref(), link, out);
+                    self.label_pieces(
+                        &text.label,
+                        text.value.as_deref(),
+                        (text.label_color, text.color),
+                        link,
+                        out,
+                    );
                 }
                 Inline::Image { alt, url } => {
                     out.push(Piece::text("▣ ", Style::new().fg(self.theme.accent)).with_link(link));

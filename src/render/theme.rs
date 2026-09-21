@@ -270,6 +270,17 @@ impl Theme {
         Style::new().fg(self.fg).bg(self.label_value_bg)
     }
 
+    pub fn label_colored(&self, (r, g, b): (u8, u8, u8)) -> Style {
+        let luminance =
+            (0.2126 * f64::from(r) + 0.7152 * f64::from(g) + 0.0722 * f64::from(b)) / 255.0;
+        let fg = if luminance > 0.55 {
+            self.h1_fg
+        } else {
+            self.fg
+        };
+        Style::new().fg(fg).bg(self.adapt(Color::Rgb(r, g, b)))
+    }
+
     pub fn footnote(&self) -> Style {
         Style::new().fg(self.accent)
     }
