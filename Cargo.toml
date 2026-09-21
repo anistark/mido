@@ -12,6 +12,8 @@ keywords = ["markdown", "tui", "terminal", "viewer", "ratatui"]
 categories = ["command-line-utilities", "text-processing"]
 exclude = [
     "/.github",
+    "/AGENTS.md",
+    "/CLAUDE.md",
     "/assets",
     "/docs/_*",
     "/docs/assets",
