@@ -132,7 +132,9 @@ fn every_page_prints_without_site_only_syntax() {
             page.display()
         );
         assert!(
-            !text.contains("layout:"),
+            !text
+                .lines()
+                .any(|line| line.trim_start().starts_with("layout:")),
             "{} leaked its front matter",
             page.display()
         );

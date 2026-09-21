@@ -566,7 +566,7 @@ fn footnote_popup_and_front_matter_toggle() {
     let mut app = App::new(Source::Stdin, &text, None);
     let mut terminal = Terminal::new(TestBackend::new(80, 30)).unwrap();
     let out = screen(&mut app, &mut terminal);
-    assert!(out.contains("▸ front matter: title, tags"), "{out}");
+    assert!(out.contains("▸  title  Rich content   tags  demo"), "{out}");
 
     press(&mut app, KeyCode::Char('m'));
     let out = screen(&mut app, &mut terminal);
@@ -575,7 +575,7 @@ fn footnote_popup_and_front_matter_toggle() {
         "{out}"
     );
     press(&mut app, KeyCode::Char('m'));
-    assert!(screen(&mut app, &mut terminal).contains("▸ front matter"));
+    assert!(screen(&mut app, &mut terminal).contains("▸  title  Rich content"));
 
     for _ in 0..3 {
         press(&mut app, KeyCode::Char(']'));

@@ -24,6 +24,7 @@ use ratatui_image::picker::Picker;
 
 use crate::markdown::{Document, parse};
 use crate::project::{Project, display_path, is_markdown};
+use crate::render::badge::badge_urls;
 use crate::render::layout::{FrontMatterView, Layout, Options, image_urls, layout_with};
 use crate::render::theme::Theme;
 use crate::render::wrap::{LinkKind, width};
@@ -828,9 +829,11 @@ impl App {
         let anchor = self.layout.source_at(self.scroll);
         let urls = image_urls(&self.doc);
         let base = self.base_dir();
+        let badges = self.images.badges(&badge_urls(&self.doc));
         let options = Options {
             front_matter: self.front_matter,
             images: self.images.sizes(&urls, &base),
+            badges,
         };
         if let Some(notice) = self.images.notice.take() {
             self.notice = Some(notice);

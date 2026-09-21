@@ -81,7 +81,8 @@ On terminals wide enough an outline of the headings sits in a tinted card at the
 - Headings, paragraphs, *emphasis*, **strong**, ~~strikethrough~~ and `inline code`
 - Links with their URL, wikilinks, footnotes[^1] with a popup for the note
 - Images drawn in Kitty, iTerm2 and Sixel terminals, half-blocks elsewhere
-- GitHub alerts, front matter as a collapsible card, definition lists, emoji shortcodes, math as styled source
+- GitHub alerts, front matter as a row of labels with `m` opening the card, definition lists, emoji shortcodes, math as styled source
+- Badges like the shields.io row above as two-tone labels, with live values under `--remote-images`
 - Nested lists, ordered lists, task lists
   - [x] like this one
   - [ ] and this one

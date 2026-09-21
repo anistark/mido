@@ -4,6 +4,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use unicode_width::UnicodeWidthChar;
 
+use super::badge::{self, BadgeText, Badges};
 use super::mermaid::{self, Kind};
 use super::syntax;
 use super::theme::{ColorMode, Theme};
@@ -15,6 +16,7 @@ use crate::markdown::{
 
 const BULLETS: [&str; 3] = ["•", "◦", "▪"];
 pub const MAX_IMAGE_ROWS: u32 = 40;
+const MAX_LABEL_WIDTH: usize = 40;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FrontMatterView {
@@ -34,6 +36,7 @@ pub struct ImageSizes {
 pub struct Options {
     pub front_matter: FrontMatterView,
     pub images: Option<ImageSizes>,
+    pub badges: Badges,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -139,7 +142,9 @@ fn collect_image_urls(blocks: &[Block], urls: &mut Vec<String>) {
     for block in blocks {
         match &block.kind {
             BlockKind::Paragraph(content) => {
-                if let Some((_, url)) = sole_image(content) {
+                if let Some((_, url)) = sole_image(content)
+                    && !badge::is_badge(url)
+                {
                     urls.push(url.to_string());
                 }
             }
@@ -174,6 +179,25 @@ fn sole_image(content: &[Inline]) -> Option<(&[Inline], &str)> {
         }
     }
     found
+}
+
+fn clip(text: &str, max: usize) -> String {
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if width(&text) <= max {
+        return text;
+    }
+    let mut out = String::new();
+    let mut used = 0;
+    for ch in text.chars() {
+        let cw = UnicodeWidthChar::width(ch).unwrap_or(0);
+        if used + cw > max.saturating_sub(1) {
+            break;
+        }
+        out.push(ch);
+        used += cw;
+    }
+    out.push('…');
+    out
 }
 
 fn sole_display_math(content: &[Inline]) -> Option<&str> {
@@ -296,20 +320,26 @@ impl Renderer<'_> {
         match self.options.front_matter {
             FrontMatterView::Hidden => return,
             FrontMatterView::Collapsed => {
-                let mut pieces = vec![
-                    Piece::text("▸ ", accent),
-                    Piece::text("front matter", self.theme.muted()),
-                ];
-                let keys = meta.keys();
-                if !keys.is_empty() {
-                    pieces.push(Piece::text(
-                        format!(": {}", keys.join(", ")),
-                        self.theme.faint(),
-                    ));
+                let fields = meta.fields();
+                let mut pieces = Vec::new();
+                if fields.is_empty() {
+                    pieces.push(Piece::text("front matter", self.theme.muted()));
                 }
+                for (i, (key, value)) in fields.iter().enumerate() {
+                    if i > 0 {
+                        pieces.push(Piece::text(" ", self.base));
+                    }
+                    self.label_pieces(key, Some(value), None, &mut pieces);
+                }
+                let mut first = self.prefix.clone();
+                first.push(Span::styled("▸ ", accent));
+                self.first = Some(first);
+                self.prefix.push(Span::raw("  "));
                 for line in wrap(&pieces, self.avail()) {
                     self.emit_line(line);
                 }
+                self.first = None;
+                self.prefix.pop();
             }
             FrontMatterView::Expanded => {
                 self.emit(vec![
@@ -383,6 +413,7 @@ impl Renderer<'_> {
 
     fn paragraph(&mut self, content: &[Inline]) {
         if let Some((alt, url)) = sole_image(content)
+            && !badge::is_badge(url)
             && let Some((cols, rows)) = self.image_cells(url)
         {
             self.image(alt, url, cols, rows);
@@ -456,6 +487,47 @@ impl Renderer<'_> {
         self.emit(vec![Span::styled("$$", fence)]);
     }
 
+    fn label_pieces(
+        &self,
+        label: &str,
+        value: Option<&str>,
+        link: Option<&LinkRef>,
+        out: &mut Vec<Piece>,
+    ) {
+        let label = clip(label, MAX_LABEL_WIDTH);
+        let value = value
+            .map(|value| clip(value, MAX_LABEL_WIDTH))
+            .filter(|value| !value.is_empty());
+        if self.theme.mode == ColorMode::Mono {
+            let text = match &value {
+                Some(value) => format!("[{label}: {value}]"),
+                None => format!("[{label}]"),
+            };
+            out.push(Piece::atomic(text, self.theme.muted()).with_link(link));
+            return;
+        }
+        out.push(Piece::atomic(format!(" {label} "), self.theme.label()).with_link(link));
+        if let Some(value) = value {
+            out.push(Piece::atomic(format!(" {value} "), self.theme.label_value()).with_link(link));
+        }
+    }
+
+    fn badge_text(&self, alt: &[Inline], url: &str) -> BadgeText {
+        if let Some(text) = self.options.badges.get(url) {
+            return text.clone();
+        }
+        let alt = plain_text(alt);
+        let alt = alt.trim();
+        let mut text = badge::from_url(url).unwrap_or(BadgeText {
+            label: String::new(),
+            value: None,
+        });
+        if text.label.is_empty() {
+            text.label = if alt.is_empty() { "badge" } else { alt }.to_string();
+        }
+        text
+    }
+
     fn inlines(&self, inlines: &[Inline], style: Style) -> Vec<Piece> {
         let mut out = Vec::new();
         self.push_inlines(inlines, style, None, &mut out);
@@ -507,7 +579,9 @@ impl Renderer<'_> {
                     };
                     let target = Some(&target);
                     self.push_inlines(content, style.patch(self.theme.link()), target, out);
-                    if !url.is_empty() && plain_text(content) != *url {
+                    let badge_only =
+                        sole_image(content).is_some_and(|(_, url)| badge::is_badge(url));
+                    if !url.is_empty() && !badge_only && plain_text(content) != *url {
                         out.push(Piece::text(" ", style).with_link(target));
                         out.push(
                             Piece::text(format!("({url})"), self.theme.link_url())
@@ -521,6 +595,10 @@ impl Renderer<'_> {
                         kind: LinkKind::Wiki,
                     };
                     self.push_inlines(content, style.patch(self.theme.link()), Some(&target), out);
+                }
+                Inline::Image { alt, url } if badge::is_badge(url) => {
+                    let text = self.badge_text(alt, url);
+                    self.label_pieces(&text.label, text.value.as_deref(), link, out);
                 }
                 Inline::Image { alt, url } => {
                     out.push(Piece::text("▣ ", Style::new().fg(self.theme.accent)).with_link(link));

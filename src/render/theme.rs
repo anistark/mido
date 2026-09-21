@@ -42,6 +42,8 @@ pub struct Theme {
     pub alert_warning: Color,
     pub alert_caution: Color,
     pub math: Color,
+    pub label_bg: Color,
+    pub label_value_bg: Color,
 }
 
 impl Theme {
@@ -86,6 +88,8 @@ impl Theme {
             alert_warning: Color::Rgb(249, 226, 175),
             alert_caution: Color::Rgb(243, 139, 168),
             math: Color::Rgb(245, 194, 231),
+            label_bg: Color::Rgb(49, 50, 68),
+            label_value_bg: surface,
         }
     }
 
@@ -149,6 +153,8 @@ impl Theme {
             &mut self.alert_warning,
             &mut self.alert_caution,
             &mut self.math,
+            &mut self.label_bg,
+            &mut self.label_value_bg,
         ] {
             *c = f(*c);
         }
@@ -254,6 +260,14 @@ impl Theme {
     pub fn list_marker_at(&self, depth: usize) -> Style {
         let colors = [self.list_marker, self.headings[1], self.headings[2]];
         Style::new().fg(colors[depth % colors.len()])
+    }
+
+    pub fn label(&self) -> Style {
+        Style::new().fg(self.fg_muted).bg(self.label_bg)
+    }
+
+    pub fn label_value(&self) -> Style {
+        Style::new().fg(self.fg).bg(self.label_value_bg)
     }
 
     pub fn footnote(&self) -> Style {

@@ -2,6 +2,17 @@
 
 All notable changes to mido are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com), and versions follow semver. Before 1.0, a minor release may change keys or configuration.
 
+## [Unreleased]
+
+### Added
+
+- Badges render as labels: an image from shields.io, badgen, docs.rs, GitHub Actions and friends becomes a two-tone chip with the badge name and its value, linked like the badge. Static shields badges read their text from the URL, and `--remote-images` fetches live values from the badge SVG, so a version badge shows the version.
+- Front matter fields parse into key and value pairs for YAML and TOML, with lists joined by commas and nested tables flattened to dotted keys.
+
+### Changed
+
+- The collapsed front matter line shows one label chip per field, key on the left and value on the right, instead of listing the keys. `m` still expands the card.
+
 ## [0.4.0] - 2026-09-20
 
 ### Added

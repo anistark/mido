@@ -57,6 +57,10 @@ Local files resolve relative to the document. Remote images are off by default. 
 
 Images inside a sentence, images that fail to load and every image in print mode show as a placeholder with the alt text and path.
 
+## Badges
+
+Badge images, the shields.io row that READMEs open with, are drawn as labels instead of image placeholders: a two-tone chip with the badge name on the left and its value on the right, linked wherever the badge links, so `]` and `Enter` follow it. mido recognises the shields.io, badgen, badge.fury.io, forthebadge and deps.rs hosts, plus any URL with a `badge` segment such as GitHub's `badge.svg`. A static shields badge carries its text in the URL, so it shows in full offline. A live badge such as a crate version only knows its name until mido fetches it: start with `--remote-images` and the value is read from the badge's SVG title, so `crates.io` becomes `crates.io v0.4.0`. Nothing is downloaded without that flag.
+
 ## Display math
 
 A `$$` block on its own renders as a fenced block of styled source:
@@ -122,7 +126,7 @@ Flowcharts, sequence, class and state diagrams go through mmdflux. Pie, gantt, m
 
 ## Front matter
 
-A YAML (`---`) or TOML (`+++`) block at the top of a file is kept out of the text and shown as one collapsed line listing its keys. `m` expands it into a highlighted card and collapses it again. The pages of this documentation carry front matter for the site generator, so they are an example.
+A YAML (`---`) or TOML (`+++`) block at the top of a file is kept out of the text and shown as a row of labels, one two-tone chip per field with the key on the left and the value on the right. Lists read as comma-separated values, nested tables become dotted keys such as `author.name`, and long values are clipped at 40 columns. `m` swaps the row for a highlighted card with the source and back again. The pages of this documentation carry front matter for the site generator, so they are an example.
 
 ## What GitHub renders, and what mido does
 
@@ -133,6 +137,7 @@ A YAML (`---`) or TOML (`+++`) block at the top of a file is kept out of the tex
 | Links, autolinks, reference links | Rendered, URL shown dim |
 | Wikilinks | Rendered, resolved in the folder |
 | Images | Rendered in Kitty, iTerm2, Sixel and half-block terminals, placeholder in print mode |
+| Badges | Rendered as labels, live values with `--remote-images` |
 | Lists, ordered lists, task lists | Rendered |
 | Definition lists | Rendered |
 | Blockquotes | Rendered |
@@ -142,6 +147,6 @@ A YAML (`---`) or TOML (`+++`) block at the top of a file is kept out of the tex
 | Emoji shortcodes | Rendered |
 | Mermaid diagrams | Rendered as text for the supported types, source with a label otherwise |
 | Math | Fallback, shown as styled source |
-| Front matter | Rendered as a collapsible card |
+| Front matter | Rendered as labels, `m` opens the card |
 | Raw HTML | Fallback, shown as faint source |
 | Thematic breaks | Rendered |

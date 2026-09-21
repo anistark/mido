@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
 use mido::markdown::parse;
+use mido::render::badge::BadgeText;
 use mido::render::layout::{FrontMatterView, ImageSizes, Options, layout, layout_with};
-use mido::render::theme::Theme;
+use mido::render::theme::{ColorMode, Theme};
 use mido::render::wrap::LinkKind;
 use unicode_width::UnicodeWidthStr;
 
@@ -34,7 +35,18 @@ fn rich_content_links_and_front_matter() {
     );
     assert!(kinds.contains(&(LinkKind::Footnote, "1")), "{kinds:?}");
     let plain = out.plain_lines().join("\n");
-    assert!(plain.starts_with("▸ front matter: title, tags"), "{plain}");
+    assert!(
+        plain.starts_with("▸  title  Rich content   tags  demo"),
+        "{plain}"
+    );
+    assert!(
+        plain.contains(" crates.io   docs  anistark.github.io/mido   CI "),
+        "{plain}"
+    );
+    assert!(
+        kinds.contains(&(LinkKind::Url, "https://crates.io/crates/mido")),
+        "{kinds:?}"
+    );
     assert!(plain.contains("● Note") && plain.contains("▲ Warning"));
     assert!(plain.contains("🎉") && plain.contains("$e = mc^2$"));
     assert!(plain.contains("▣ A tiny square (images/tiny.png)"));
@@ -46,6 +58,7 @@ fn rich_content_links_and_front_matter() {
         &Options {
             front_matter: FrontMatterView::Expanded,
             images: None,
+            badges: HashMap::new(),
         },
     );
     let plain = expanded.plain_lines().join("\n");
@@ -60,9 +73,47 @@ fn rich_content_links_and_front_matter() {
         &Options {
             front_matter: FrontMatterView::Hidden,
             images: None,
+            badges: HashMap::new(),
         },
     );
     assert!(!hidden.plain_lines().join("\n").contains("front matter"));
+}
+
+#[test]
+fn badges_take_fetched_values_and_mono_brackets() {
+    let text = std::fs::read_to_string("tests/fixtures/rich.md").unwrap();
+    let doc = parse(&text);
+    let mut badges = HashMap::new();
+    badges.insert(
+        "https://img.shields.io/crates/v/mido".to_string(),
+        BadgeText {
+            label: "crates.io".to_string(),
+            value: Some("v0.4.0".to_string()),
+        },
+    );
+    let out = layout_with(
+        &doc,
+        &Theme::dark(),
+        60,
+        &Options {
+            front_matter: FrontMatterView::Collapsed,
+            images: None,
+            badges,
+        },
+    );
+    let plain = out.plain_lines().join("\n");
+    assert!(plain.contains(" crates.io  v0.4.0 "), "{plain}");
+
+    let mono = layout(&doc, &Theme::dark().with_mode(ColorMode::Mono), 60);
+    let plain = mono.plain_lines().join("\n");
+    assert!(
+        plain.starts_with("▸ [title: Rich content] [tags: demo]"),
+        "{plain}"
+    );
+    assert!(
+        plain.contains("[crates.io] [docs: anistark.github.io/mido] [CI]"),
+        "{plain}"
+    );
 }
 
 #[test]
@@ -81,6 +132,7 @@ fn images_reserve_rows_when_sizes_are_known() {
                 font: (10, 20),
                 sizes,
             }),
+            badges: HashMap::new(),
         },
     );
     assert_eq!(out.images.len(), 1);

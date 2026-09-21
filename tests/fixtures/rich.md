@@ -30,3 +30,5 @@ Another term
 A reference[^1] to a footnote.
 
 [^1]: The footnote body.
+
+[![crates.io](https://img.shields.io/crates/v/mido)](https://crates.io/crates/mido) ![docs](https://img.shields.io/badge/docs-anistark.github.io%2Fmido-2ea44f) [![CI](https://github.com/anistark/mido/actions/workflows/ci.yml/badge.svg)](https://github.com/anistark/mido/actions/workflows/ci.yml)

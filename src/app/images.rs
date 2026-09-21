@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use image::{DynamicImage, ImageReader, Limits};
 use ratatui::layout::Size;
@@ -9,9 +10,12 @@ use ratatui_image::Resize;
 use ratatui_image::picker::Picker;
 use ratatui_image::sliced::SlicedProtocol;
 
+use crate::render::badge::{self, BadgeText, Badges};
 use crate::render::layout::ImageSizes;
 
 const MAX_REMOTE_BYTES: u64 = 10 * 1024 * 1024;
+const MAX_BADGE_BYTES: u64 = 64 * 1024;
+const BADGE_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_DIMENSION: u32 = 8192;
 const MAX_ALLOC: u64 = 256 * 1024 * 1024;
 
@@ -21,6 +25,7 @@ pub struct Images {
     pub enabled: bool,
     pub remote: bool,
     loaded: HashMap<String, Option<DynamicImage>>,
+    badges: HashMap<String, Option<BadgeText>>,
     protocols: HashMap<(String, u16, u16), SlicedProtocol>,
     pub notice: Option<String>,
 }
@@ -68,6 +73,29 @@ impl Images {
             font: (font.width, font.height),
             sizes,
         })
+    }
+
+    pub fn badges(&mut self, urls: &[String]) -> Badges {
+        let mut out = Badges::new();
+        if !self.remote {
+            return out;
+        }
+        for url in urls {
+            if !self.badges.contains_key(url) {
+                let text = match fetch_text(url) {
+                    Ok(svg) => badge::from_svg(&svg),
+                    Err(err) => {
+                        self.notice = Some(format!("badge {url}: {err}"));
+                        None
+                    }
+                };
+                self.badges.insert(url.clone(), text);
+            }
+            if let Some(text) = self.badges.get(url).cloned().flatten() {
+                out.insert(url.clone(), text);
+            }
+        }
+        out
     }
 
     fn key(url: &str, base: &Path) -> String {
@@ -153,6 +181,20 @@ fn decode(bytes: Vec<u8>) -> Result<DynamicImage, String> {
         .map_err(|err| err.to_string())?;
     reader.limits(limits());
     reader.decode().map_err(|err| err.to_string())
+}
+
+fn fetch_text(url: &str) -> Result<String, String> {
+    let agent = ureq::Agent::config_builder()
+        .timeout_global(Some(BADGE_TIMEOUT))
+        .build()
+        .new_agent();
+    let mut response = agent.get(url).call().map_err(|err| err.to_string())?;
+    response
+        .body_mut()
+        .with_config()
+        .limit(MAX_BADGE_BYTES)
+        .read_to_string()
+        .map_err(|err| err.to_string())
 }
 
 fn cache_path(url: &str) -> Option<PathBuf> {

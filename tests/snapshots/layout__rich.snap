@@ -2,7 +2,7 @@
 source: tests/layout.rs
 expression: "render(name, 60).join(\"\\n\")"
 ---
-▸ front matter: title, tags
+▸  title  Rich content   tags  demo 
 
  Rich content 
 
@@ -30,6 +30,8 @@ Another term
 ▣ A tiny square (images/tiny.png)
 
 A reference¹ to a footnote.
+
+ crates.io   docs  anistark.github.io/mido   CI 
 
 ────────────────────────────────────────────────────────────
 
