@@ -2,6 +2,29 @@
 
 All notable changes to mido are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com), and versions follow semver. Before 1.0, a minor release may change keys or configuration.
 
+## [Unreleased]
+
+### Added
+
+- Themes: eleven built in, `mido-dark`, `mido-light`, `mido-reading` (a warm, low-contrast paper palette), Catppuccin Mocha and Latte, Gruvbox, Nord, Tokyo Night, Dracula, and Solarized dark and light. Pick one with `--theme <name>` or `theme` in the config. The themes that come from an editor palette paint their own background.
+- Theme files in TOML with `schema = 1`: a `[palette]` of named colors, `[colors]` for every token, and `extends` to change a few tokens of another theme. User themes go in `~/.config/mido/themes/`, a path works too, and a theme missing a token is refused with the token named.
+- `mido themes` lists every theme with its kind and a swatch of its colors.
+- Light or dark detection: with the default `theme = "auto"`, mido asks the terminal for its background once at startup, waits at most 100 ms, falls back to `COLORFGBG`, then to dark, and picks `mido-light` or `mido-dark`. `background`, `dark_theme` and `light_theme` in the config override it.
+- Code blocks take their syntax colors from a syntect theme chosen by the mido theme.
+- Config at `~/.config/mido/config.toml` (`%APPDATA%\mido\config` on Windows, `MIDO_CONFIG_DIR` or `--config` to point elsewhere), and a `.mido.toml` in the opened folder or above it that overrides it. Settings: `theme`, `dark_theme`, `light_theme`, `background`, `glyphs`, `width`, `gutter`, `front_matter`, `extensions` and `[keys]`. An unknown setting is an error, not ignored.
+- Glyph tiers: `glyphs = "ascii"` draws everything in plain ASCII, Mermaid diagrams included, and `glyphs = "nerd"` adds Nerd Font icons to the files panel, images and alerts.
+- Key remapping in `[keys]`, by action name. The help overlay, the status bar hints and `docs/keys.md` show the keys actually bound.
+- `front_matter = "hidden"` starts with the front matter out of sight, and `m` still shows it.
+- `extensions` sets which files count as Markdown, replacing the fixed list.
+- A theme gallery: the docs site shows the same page drawn in every built-in theme, generated in CI from the screen buffer the tests use.
+- A fonts table in the docs recording which glyphs Menlo, MesloLGS NF, JetBrains Mono, SF Mono, Source Code Pro and older macOS fonts cover.
+
+### Changed
+
+- The parse, layout and theme code moved into a `mido-core` crate with no terminal dependency, published alongside `mido`, so other tools can embed the renderer.
+- The help overlay lists both keys of a pair, so the panel row reads `j / k, ↓ / ↑ in a panel`, and `?` is listed before `h`.
+- CI fails on a raw color outside the theme module.
+
 ## [0.4.1] - 2026-09-21
 
 ### Added

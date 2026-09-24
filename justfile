@@ -11,12 +11,23 @@ run *args='README.md':
     cargo run -q -- {{args}}
 
 test:
-    cargo test
+    cargo test --workspace
 
-check:
+check: colors
     cargo fmt --check
-    cargo clippy --all-targets -- -D warnings
-    cargo test
+    cargo clippy --workspace --all-targets -- -D warnings
+    cargo test --workspace
+
+colors:
+    #!/usr/bin/env bash
+    if grep -rn --include='*.rs' 'Color::' src crates | grep -v '^crates/mido-core/src/render/theme.rs:'; then
+        echo "raw colors outside crates/mido-core/src/render/theme.rs, add a theme token instead"
+        exit 1
+    fi
+
+gallery dir='target/gallery':
+    MIDO_GALLERY={{dir}} cargo test -q --test gallery
+    @echo "open {{dir}}/index.html"
 
 docs:
     pnpm -C docs dev
@@ -28,7 +39,7 @@ docs-read:
     cargo run -q -- docs/
 
 keys:
-    MIDO_UPDATE_DOCS=1 cargo test -q --test docs keys_page
+    MIDO_UPDATE_DOCS=1 cargo test -q --test docs -- keys_page themes_page
 
 man:
     mkdir -p target/man && cargo run -q -- --man > target/man/mido.1
@@ -50,9 +61,9 @@ publish-crate: _gates
     #!/usr/bin/env bash
     set -euo pipefail
     grep -Eq "^## \[{{version}}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}" CHANGELOG.md || { echo "CHANGELOG.md needs a dated ## [{{version}}] section"; exit 1; }
-    cargo publish --dry-run
-    cargo publish
-    echo "published mido {{version}}"
+    cargo publish --workspace --dry-run
+    cargo publish --workspace
+    echo "published mido-core and mido {{version}}"
 
 gh-tag: _gates
     #!/usr/bin/env bash

@@ -632,3 +632,84 @@ fn images_render_as_halfblocks_and_toggle_off() {
         "placeholder after toggling images off:\n{out}"
     );
 }
+
+fn configured(text: &str, settings: mido::app::Settings) -> App {
+    let mut app = App::with_settings(Source::Stdin, text, settings);
+    app.set_sidebar(Some(false));
+    app
+}
+
+#[test]
+fn remapped_keys_drive_the_viewer_and_the_help() {
+    let text = std::fs::read_to_string("tests/fixtures/readme.md").unwrap();
+    let overrides = std::collections::BTreeMap::from([
+        ("scroll_down".to_string(), vec!["n".to_string()]),
+        ("help".to_string(), vec!["F1".to_string()]),
+    ]);
+    let settings = mido::app::Settings {
+        keymap: mido::app::keys::Keymap::with_overrides(&overrides).unwrap(),
+        ..Default::default()
+    };
+    let mut app = configured(&text, settings);
+    let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    let top = screen(&mut app, &mut terminal);
+    assert!(
+        top.contains("F1 help"),
+        "the status bar names the bound key"
+    );
+
+    press(&mut app, KeyCode::Char('j'));
+    assert_eq!(screen(&mut app, &mut terminal), top, "j no longer scrolls");
+    press(&mut app, KeyCode::Char('n'));
+    assert_ne!(screen(&mut app, &mut terminal), top, "n scrolls instead");
+
+    press(&mut app, KeyCode::F(1));
+    let help = screen(&mut app, &mut terminal);
+    assert!(help.contains("n / k, ↑, wheel"), "{help}");
+}
+
+#[test]
+fn ascii_glyphs_draw_nothing_outside_ascii() {
+    let text = std::fs::read_to_string("tests/fixtures/readme.md").unwrap();
+    let theme = mido::render::theme::Theme::dark().with_glyphs(mido::render::glyphs::Glyphs::ASCII);
+    let settings = mido::app::Settings {
+        theme,
+        ..Default::default()
+    };
+    let mut app = App::with_settings(Source::Stdin, &text, settings);
+    let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
+    let view = screen(&mut app, &mut terminal);
+    for symbol in ["│", "─", "╭", "•", "▸", "▾", "▎", "…", "☐"] {
+        assert!(!view.contains(symbol), "{symbol} in\n{view}");
+    }
+    insta::assert_snapshot!("ascii", view);
+}
+
+#[test]
+fn gutter_and_front_matter_follow_the_settings() {
+    let text = "---\ntitle: Hi\n---\n\n# Heading\n\nBody text.\n";
+    let settings = mido::app::Settings {
+        gutter: 6,
+        front_matter: mido::render::layout::FrontMatterView::Hidden,
+        ..Default::default()
+    };
+    let mut app = configured(text, settings);
+    let mut terminal = Terminal::new(TestBackend::new(80, 12)).unwrap();
+    let view = screen(&mut app, &mut terminal);
+    assert!(
+        !view.contains("title"),
+        "front matter starts hidden\n{view}"
+    );
+    assert!(
+        content_line(&view, 0).starts_with("\"       Heading"),
+        "{view}"
+    );
+
+    press(&mut app, KeyCode::Char('m'));
+    assert!(screen(&mut app, &mut terminal).contains("front matter"));
+    press(&mut app, KeyCode::Char('m'));
+    assert!(
+        !screen(&mut app, &mut terminal).contains("title"),
+        "m returns to hidden"
+    );
+}

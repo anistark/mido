@@ -1,5 +1,5 @@
-use ratatui::style::Style;
-use ratatui::text::Span;
+use ratatui_core::style::Style;
+use ratatui_core::text::Span;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

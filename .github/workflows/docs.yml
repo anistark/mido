@@ -8,6 +8,9 @@ on:
       - "CHANGELOG.md"
       - "Cargo.toml"
       - "src/**"
+      - "crates/**"
+      - "tests/gallery.rs"
+      - "tests/fixtures/gallery.md"
       - ".github/workflows/docs.yml"
   release:
     types: [published]
@@ -47,6 +50,9 @@ jobs:
         working-directory: docs
       - run: pnpm build
         working-directory: docs
+      - run: cargo test --release --test gallery
+        env:
+          MIDO_GALLERY: docs/_site/gallery
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs/_site

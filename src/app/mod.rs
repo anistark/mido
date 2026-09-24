@@ -23,16 +23,50 @@ use ratatui::widgets::ListState;
 use ratatui_image::picker::Picker;
 
 use crate::markdown::{Document, parse};
-use crate::project::{Project, display_path, is_markdown};
+use crate::project::{Project, default_extensions, display_path, is_markdown};
 use crate::render::badge::badge_urls;
+use crate::render::glyphs::Glyphs;
 use crate::render::layout::{FrontMatterView, Layout, Options, image_urls, layout_with};
 use crate::render::theme::Theme;
 use crate::render::wrap::{LinkKind, width};
 use images::Images;
+use keys::{Action, Keymap};
 use search::Match;
 use watch::FileWatcher;
 
 const TAB_CHORD: Duration = Duration::from_secs(1);
+
+/// Everything the config decides for the viewer.
+#[derive(Debug, Clone)]
+pub struct Settings {
+    pub theme: Theme,
+    pub max_width: Option<usize>,
+    pub gutter: u16,
+    pub keymap: Keymap,
+    pub front_matter: FrontMatterView,
+    pub extensions: Vec<String>,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            theme: Theme::dark(),
+            max_width: None,
+            gutter: 2,
+            keymap: Keymap::default(),
+            front_matter: FrontMatterView::Collapsed,
+            extensions: default_extensions(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Nav {
+    Down,
+    Up,
+    Top,
+    Bottom,
+}
 
 pub enum Source {
     Stdin,
@@ -92,10 +126,11 @@ struct Panel {
     list_area: Rect,
     heights: Vec<usize>,
     hide_root: bool,
+    glyphs: Glyphs,
 }
 
 impl Panel {
-    fn new(hide_root: bool) -> Self {
+    fn new(hide_root: bool, glyphs: Glyphs) -> Self {
         Self {
             list: ListState::default(),
             tree: outline::Tree::default(),
@@ -105,6 +140,7 @@ impl Panel {
             list_area: Rect::default(),
             heights: Vec::new(),
             hide_root,
+            glyphs,
         }
     }
 
@@ -115,7 +151,7 @@ impl Panel {
     }
 
     fn refresh(&mut self) {
-        self.rows = self.tree.rows(&self.collapsed);
+        self.rows = self.tree.rows(&self.collapsed, &self.glyphs);
         if self.hide_root {
             self.rows.retain(|r| r.index != 0);
         }
@@ -190,6 +226,9 @@ pub struct App {
     doc: Document,
     theme: Theme,
     max_width: Option<usize>,
+    gutter: u16,
+    keymap: Keymap,
+    extensions: Vec<String>,
     layout: Layout,
     layout_width: usize,
     scroll: usize,
@@ -220,6 +259,7 @@ pub struct App {
     watcher: Option<FileWatcher>,
     images: Images,
     front_matter: FrontMatterView,
+    front_matter_default: FrontMatterView,
     footnote: Option<String>,
     edit_request: bool,
     notice: Option<String>,
@@ -228,6 +268,17 @@ pub struct App {
 
 impl App {
     pub fn new(source: Source, text: &str, max_width: Option<usize>) -> Self {
+        Self::with_settings(
+            source,
+            text,
+            Settings {
+                max_width,
+                ..Settings::default()
+            },
+        )
+    }
+
+    pub fn with_settings(source: Source, text: &str, settings: Settings) -> Self {
         let (project, file) = match source {
             Source::Stdin => (None, None),
             Source::File(path) => (None, Some(path)),
@@ -245,8 +296,13 @@ impl App {
             project,
             file,
             doc: parse(text),
-            theme: Theme::for_terminal(),
-            max_width,
+            files: Panel::new(true, settings.theme.glyphs),
+            outline: Panel::new(false, settings.theme.glyphs),
+            theme: settings.theme,
+            max_width: settings.max_width,
+            gutter: settings.gutter,
+            keymap: settings.keymap,
+            extensions: settings.extensions,
             layout: Layout::default(),
             layout_width: 0,
             scroll: 0,
@@ -257,9 +313,7 @@ impl App {
             show_files: None,
             show_outline: None,
             focus_mode: false,
-            files: Panel::new(true),
             files_titles: false,
-            outline: Panel::new(false),
             outline_widest: 0,
             link: None,
             back: Vec::new(),
@@ -276,7 +330,8 @@ impl App {
             finder: finder::Finder::new(),
             watcher,
             images: Images::new(),
-            front_matter: FrontMatterView::Collapsed,
+            front_matter: settings.front_matter,
+            front_matter_default: settings.front_matter,
             footnote: None,
             edit_request: false,
             notice: None,
@@ -374,7 +429,10 @@ impl App {
             None => false,
         };
         let touches_current = paths.iter().any(|p| same_file(p));
-        let tree_changed = in_project && paths.iter().any(|p| !same_file(p) && is_markdown(p));
+        let tree_changed = in_project
+            && paths
+                .iter()
+                .any(|p| !same_file(p) && is_markdown(p, &self.extensions));
         if touches_current {
             self.reload();
         }
@@ -396,7 +454,7 @@ impl App {
             .selected()
             .and_then(|r| self.files.rows.get(r))
             .and_then(|r| project.entries.get(r.index).map(|e| e.path.clone()));
-        let fresh = Project::scan(&project.root);
+        let fresh = Project::scan_with(&project.root, &project.extensions);
         self.files.collapsed = fresh
             .entries
             .iter()
@@ -713,8 +771,9 @@ impl App {
             self.notice = Some("no front matter".to_string());
             return;
         }
-        self.front_matter = match self.front_matter {
-            FrontMatterView::Expanded => FrontMatterView::Collapsed,
+        self.front_matter = match (self.front_matter, self.front_matter_default) {
+            (FrontMatterView::Expanded, FrontMatterView::Expanded) => FrontMatterView::Collapsed,
+            (FrontMatterView::Expanded, default) => default,
             _ => FrontMatterView::Expanded,
         };
         self.layout_width = 0;
@@ -756,7 +815,7 @@ impl App {
             self.notice = Some(format!("not found: {path_part}"));
             return;
         }
-        if !is_markdown(&target) {
+        if !is_markdown(&target, &self.extensions) {
             self.notice = Some(match open::that_detached(&target) {
                 Ok(()) => format!("opened {}", target.display()),
                 Err(err) => format!("cannot open {}: {err}", target.display()),
@@ -843,7 +902,7 @@ impl App {
         self.link = None;
         let tree = outline::Tree::new(&self.layout.headings);
         self.outline_widest = tree
-            .rows(&HashSet::new())
+            .rows(&HashSet::new(), &self.theme.glyphs)
             .iter()
             .map(|r| width(&r.prefix) + 2 + width(&self.layout.headings[r.index].text))
             .max()
@@ -1065,9 +1124,9 @@ impl App {
                 self.focus_direction(chord.unwrap().0, key.code)
             }
             Mode::View => match self.focus {
-                Focus::Files => self.key_files(key, ctrl),
-                Focus::Outline => self.key_outline(key, ctrl),
-                Focus::Content => self.key_view(key, ctrl),
+                Focus::Files => self.key_files(key),
+                Focus::Outline => self.key_outline(key),
+                Focus::Content => self.key_view(key),
             },
             Mode::Help => self.key_help(key),
             Mode::Toc => self.key_toc(key),
@@ -1080,87 +1139,149 @@ impl App {
         }
     }
 
-    fn key_view(&mut self, key: KeyEvent, ctrl: bool) {
+    fn key_view(&mut self, key: KeyEvent) {
         let page = self.view_height.max(1) as isize;
         match key.code {
-            KeyCode::Char('q') => self.quit = true,
-            KeyCode::Esc if self.link.is_some() => self.link = None,
-            KeyCode::Esc if !self.query.is_empty() => self.clear_search(),
-            KeyCode::Esc => self.quit = true,
-            KeyCode::Enter if self.link.is_some() => self.activate_link(self.link.unwrap()),
-            KeyCode::Char(']') => self.select_link(1),
-            KeyCode::Char('[') => self.select_link(-1),
-            KeyCode::Char('H') => self.go_back(),
-            KeyCode::Char('L') => self.go_forward(),
-            KeyCode::Char('j') | KeyCode::Down | KeyCode::Enter => self.scroll_by(1),
-            KeyCode::Char('k') | KeyCode::Up => self.scroll_by(-1),
-            KeyCode::Char('d') if ctrl => self.scroll_by(page / 2),
-            KeyCode::Char('u') if ctrl => self.scroll_by(-page / 2),
-            KeyCode::Char('f') if ctrl => self.scroll_by(page),
-            KeyCode::Char('b') if ctrl => self.scroll_by(-page),
-            KeyCode::PageDown | KeyCode::Char(' ') => self.scroll_by(page),
-            KeyCode::PageUp => self.scroll_by(-page),
-            KeyCode::Char('g') | KeyCode::Home => self.scroll = 0,
-            KeyCode::Char('G') | KeyCode::End => self.scroll = self.max_scroll(),
-            KeyCode::Char('b') => self.toggle_files(),
-            KeyCode::Char('o') => self.toggle_outline(),
-            KeyCode::Char('h') | KeyCode::Char('?') => {
+            KeyCode::Esc if self.link.is_some() => return self.link = None,
+            KeyCode::Esc if !self.query.is_empty() => return self.clear_search(),
+            KeyCode::Esc => return self.quit = true,
+            KeyCode::Enter if self.link.is_some() => return self.activate_link(self.link.unwrap()),
+            _ => {}
+        }
+        let Some(action) = self.keymap.action(&key) else {
+            match key.code {
+                KeyCode::Enter => self.scroll_by(1),
+                KeyCode::PageDown => self.scroll_by(page),
+                KeyCode::PageUp => self.scroll_by(-page),
+                KeyCode::Home => self.scroll = 0,
+                KeyCode::End => self.scroll = self.max_scroll(),
+                _ => {}
+            }
+            return;
+        };
+        match action {
+            Action::Quit => self.quit = true,
+            Action::NextLink => self.select_link(1),
+            Action::PrevLink => self.select_link(-1),
+            Action::Back => self.go_back(),
+            Action::Forward => self.go_forward(),
+            Action::ScrollDown => self.scroll_by(1),
+            Action::ScrollUp => self.scroll_by(-1),
+            Action::HalfPageDown => self.scroll_by(page / 2),
+            Action::HalfPageUp => self.scroll_by(-page / 2),
+            Action::PageDown => self.scroll_by(page),
+            Action::PageUp => self.scroll_by(-page),
+            Action::Top => self.scroll = 0,
+            Action::Bottom => self.scroll = self.max_scroll(),
+            Action::Files => self.toggle_files(),
+            Action::Outline => self.toggle_outline(),
+            Action::Help => {
                 self.help_scroll = 0;
                 self.mode = Mode::Help;
             }
-            KeyCode::Char('l') if self.outline.area.is_some() => self.set_focus(Focus::Outline),
-            KeyCode::Char('/') => {
+            Action::FocusRight => {
+                if self.outline.area.is_some() {
+                    self.set_focus(Focus::Outline);
+                }
+            }
+            Action::Search => {
                 self.mode = Mode::Search;
                 self.search_origin = self.scroll;
                 self.query.clear();
                 self.matches.clear();
                 self.current = None;
             }
-            KeyCode::Char('n') => self.step_match(1),
-            KeyCode::Char('N') => self.step_match(-1),
-            KeyCode::Char('t') => self.open_toc(),
-            KeyCode::Char('f') => self.toggle_focus_mode(),
-            KeyCode::Char('p') if ctrl => self.open_finder(),
-            KeyCode::Char('E') => self.edit_request = true,
-            KeyCode::Char('r') => self.reload(),
-            KeyCode::Char('i') => self.toggle_images(),
-            KeyCode::Char('m') => self.toggle_front_matter(),
-            _ => {}
+            Action::NextMatch => self.step_match(1),
+            Action::PrevMatch => self.step_match(-1),
+            Action::Toc => self.open_toc(),
+            Action::FocusMode => self.toggle_focus_mode(),
+            Action::Finder => self.open_finder(),
+            Action::Edit => self.edit_request = true,
+            Action::Reload => self.reload(),
+            Action::Images => self.toggle_images(),
+            Action::FrontMatter => self.toggle_front_matter(),
         }
     }
 
-    fn key_outline(&mut self, key: KeyEvent, ctrl: bool) {
-        let last = self.outline.rows.len().saturating_sub(1);
+    fn nav(&self, key: &KeyEvent) -> Option<Nav> {
         match key.code {
-            KeyCode::Char('j') | KeyCode::Down => self.outline_move(1),
-            KeyCode::Char('k') | KeyCode::Up => self.outline_move(-1),
-            KeyCode::Char('g') | KeyCode::Home => self.outline_set(0),
-            KeyCode::Char('G') | KeyCode::End => self.outline_set(last),
+            KeyCode::Down => Some(Nav::Down),
+            KeyCode::Up => Some(Nav::Up),
+            KeyCode::Home => Some(Nav::Top),
+            KeyCode::End => Some(Nav::Bottom),
+            _ => match self.keymap.action(key)? {
+                Action::ScrollDown => Some(Nav::Down),
+                Action::ScrollUp => Some(Nav::Up),
+                Action::Top => Some(Nav::Top),
+                Action::Bottom => Some(Nav::Bottom),
+                _ => None,
+            },
+        }
+    }
+
+    fn expands(&self, key: &KeyEvent) -> bool {
+        key.code == KeyCode::Right || self.keymap.action(key) == Some(Action::FocusRight)
+    }
+
+    fn help_rows(&self) -> usize {
+        self.keymap
+            .sections()
+            .iter()
+            .map(|(_, rows)| rows.len() + 2)
+            .sum::<usize>()
+            .saturating_sub(1)
+    }
+
+    fn key_outline(&mut self, key: KeyEvent) {
+        let last = self.outline.rows.len().saturating_sub(1);
+        if let Some(nav) = self.nav(&key) {
+            return match nav {
+                Nav::Down => self.outline_move(1),
+                Nav::Up => self.outline_move(-1),
+                Nav::Top => self.outline_set(0),
+                Nav::Bottom => self.outline_set(last),
+            };
+        }
+        if self.expands(&key) {
+            if !self.panel_expand(Focus::Outline) {
+                self.focus = Focus::Content;
+            }
+            return;
+        }
+        match key.code {
             KeyCode::Char(' ') => {
                 if let Some(row) = self.outline.selected() {
                     self.outline.toggle(row);
                 }
             }
             KeyCode::Left => self.panel_collapse(Focus::Outline),
-            KeyCode::Char('l') | KeyCode::Right => {
-                if !self.panel_expand(Focus::Outline) {
-                    self.focus = Focus::Content;
-                }
-            }
             KeyCode::Char('-') => self.outline.fold_all(true),
             KeyCode::Char('+') | KeyCode::Char('=') => self.outline.fold_all(false),
             KeyCode::Enter | KeyCode::Esc => self.focus = Focus::Content,
-            _ => self.key_view(key, ctrl),
+            _ => self.key_view(key),
         }
     }
 
-    fn key_files(&mut self, key: KeyEvent, ctrl: bool) {
+    fn key_files(&mut self, key: KeyEvent) {
         let last = self.files.rows.len().saturating_sub(1);
+        if let Some(nav) = self.nav(&key) {
+            return match nav {
+                Nav::Down => self.files_move(1),
+                Nav::Up => self.files_move(-1),
+                Nav::Top => self.files.list.select(Some(0)),
+                Nav::Bottom => self.files.list.select(Some(last)),
+            };
+        }
+        if self.expands(&key) {
+            if !self.panel_expand(Focus::Files)
+                && let Some(row) = self.files.selected()
+                && self.open_entry(row)
+            {
+                self.focus = Focus::Content;
+            }
+            return;
+        }
         match key.code {
-            KeyCode::Char('j') | KeyCode::Down => self.files_move(1),
-            KeyCode::Char('k') | KeyCode::Up => self.files_move(-1),
-            KeyCode::Char('g') | KeyCode::Home => self.files.list.select(Some(0)),
-            KeyCode::Char('G') | KeyCode::End => self.files.list.select(Some(last)),
             KeyCode::Char(' ') => {
                 if let Some(row) = self.files.selected() {
                     self.open_entry(row);
@@ -1174,34 +1295,22 @@ impl App {
                 }
             }
             KeyCode::Left => self.panel_collapse(Focus::Files),
-            KeyCode::Char('l') | KeyCode::Right => {
-                if !self.panel_expand(Focus::Files)
-                    && let Some(row) = self.files.selected()
-                    && self.open_entry(row)
-                {
-                    self.focus = Focus::Content;
-                }
-            }
             KeyCode::Char('-') => self.files.fold_all(true),
             KeyCode::Char('+') | KeyCode::Char('=') => self.files.fold_all(false),
             KeyCode::Char('T') => self.files_titles = !self.files_titles,
             KeyCode::Esc => self.focus = Focus::Content,
-            _ => self.key_view(key, ctrl),
+            _ => self.key_view(key),
         }
     }
 
     fn key_help(&mut self, key: KeyEvent) {
-        let last = keys::help_rows().saturating_sub(1);
-        match key.code {
-            KeyCode::Char('j') | KeyCode::Down => {
-                self.help_scroll = (self.help_scroll + 1).min(last)
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
-                self.help_scroll = self.help_scroll.saturating_sub(1)
-            }
-            KeyCode::Char('g') | KeyCode::Home => self.help_scroll = 0,
-            KeyCode::Char('G') | KeyCode::End => self.help_scroll = last,
-            _ => {
+        let last = self.help_rows().saturating_sub(1);
+        match self.nav(&key) {
+            Some(Nav::Down) => self.help_scroll = (self.help_scroll + 1).min(last),
+            Some(Nav::Up) => self.help_scroll = self.help_scroll.saturating_sub(1),
+            Some(Nav::Top) => self.help_scroll = 0,
+            Some(Nav::Bottom) => self.help_scroll = last,
+            None => {
                 self.help_scroll = 0;
                 self.mode = Mode::View;
             }
@@ -1211,18 +1320,24 @@ impl App {
     fn key_toc(&mut self, key: KeyEvent) {
         let count = self.layout.headings.len();
         let selected = self.toc.selected().unwrap_or(0);
+        if let Some(nav) = self.nav(&key) {
+            let row = match nav {
+                Nav::Down => (selected + 1).min(count - 1),
+                Nav::Up => selected.saturating_sub(1),
+                Nav::Top => 0,
+                Nav::Bottom => count - 1,
+            };
+            return self.toc.select(Some(row));
+        }
         match key.code {
-            KeyCode::Char('q') | KeyCode::Esc | KeyCode::Char('t') => self.mode = Mode::View,
-            KeyCode::Char('j') | KeyCode::Down => {
-                self.toc.select(Some((selected + 1).min(count - 1)))
-            }
-            KeyCode::Char('k') | KeyCode::Up => self.toc.select(Some(selected.saturating_sub(1))),
-            KeyCode::Char('g') | KeyCode::Home => self.toc.select(Some(0)),
-            KeyCode::Char('G') | KeyCode::End => self.toc.select(Some(count - 1)),
+            KeyCode::Esc => self.mode = Mode::View,
             KeyCode::Enter => {
                 let line = self.layout.headings[selected].line;
                 self.scroll = line.min(self.max_scroll());
                 self.mode = Mode::View;
+            }
+            _ if matches!(self.keymap.action(&key), Some(Action::Quit | Action::Toc)) => {
+                self.mode = Mode::View
             }
             _ => {}
         }

@@ -4,12 +4,12 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{
-    Block, BorderType, Clear, List, ListItem, ListState, Paragraph, Scrollbar,
-    ScrollbarOrientation, ScrollbarState, StatefulWidget, Widget,
+    Block, Clear, List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation,
+    ScrollbarState, StatefulWidget, Widget,
 };
 use ratatui_image::sliced::{SignedPosition, SlicedImage};
 
-use super::keys::{self, SECTIONS};
+use super::keys::{self, Action};
 use super::{App, Focus, Mode, Panel};
 use crate::markdown::Document;
 use crate::render::layout::{footnote_label, layout};
@@ -60,12 +60,15 @@ impl App {
             self.outline.list.select(row);
         }
 
-        let (left, right) = gutters(content_area.width);
+        let (left, right) = gutters(content_area.width, self.gutter);
         let available = (content_area.width - left - right) as usize;
         let x = content_area.x + left + ((available - content_width) / 2) as u16;
         self.content_origin = (x, content_area.y);
         self.content_cols = content_width as u16;
         let buf = frame.buffer_mut();
+        if self.theme.paints_background() {
+            buf.set_style(area, self.theme.background());
+        }
         if self.layout.lines.is_empty() {
             let notice = if self.project.is_some() && self.file.is_none() {
                 "No Markdown files here yet."
@@ -86,7 +89,7 @@ impl App {
             buf.set_line(x, y, line, content_width as u16);
             if line.width() > content_width {
                 buf[(x + content_width as u16 - 1, y)]
-                    .set_symbol("…")
+                    .set_symbol(self.theme.glyphs.ellipsis)
                     .set_style(self.theme.faint());
             }
         }
@@ -109,7 +112,8 @@ impl App {
             Scrollbar::new(ScrollbarOrientation::VerticalRight)
                 .begin_symbol(None)
                 .end_symbol(None)
-                .track_symbol(Some("│"))
+                .track_symbol(Some(self.theme.glyphs.scroll_track))
+                .thumb_symbol(self.theme.glyphs.scroll_thumb)
                 .track_style(self.theme.rule())
                 .thumb_style(self.theme.faint())
                 .render(
@@ -185,7 +189,10 @@ impl App {
         let popup = centered(area, w, h);
         Clear.render(popup, buf);
         let block = self
-            .popup_block(&format!(" Footnote {} ", footnote_label(&note.label)))
+            .popup_block(&format!(
+                " Footnote {} ",
+                footnote_label(&note.label, self.theme.glyphs.superscript)
+            ))
             .title_bottom(self.hint(" any key closes "));
         Paragraph::new(out.lines)
             .block(block.padding(ratatui::widgets::Padding::horizontal(1)))
@@ -200,10 +207,10 @@ impl App {
         Clear.render(popup, buf);
         let block = self
             .popup_block(" Find file ")
-            .title_bottom(self.hint(" Enter open · Esc close "));
+            .title_bottom(self.hint(&format!(" Enter open {} Esc close ", self.theme.glyphs.dot)));
         let inner = block.inner(popup);
         block.render(popup, buf);
-        let prompt = format!(" > {}▏", self.finder.query);
+        let prompt = format!(" > {}{}", self.finder.query, self.theme.glyphs.cursor);
         let prompt_style = Style::new().fg(self.theme.accent);
         buf.set_stringn(
             inner.x,
@@ -253,7 +260,7 @@ impl App {
         let mut state = ListState::default().with_selected(Some(self.finder.selected));
         let list = List::new(items)
             .highlight_style(self.theme.selected())
-            .highlight_symbol("▸ ");
+            .highlight_symbol(self.theme.glyphs.collapsed);
         StatefulWidget::render(list, list_area, buf, &mut state);
     }
 
@@ -271,7 +278,7 @@ impl App {
     }
 
     fn content_width(&self, area_width: u16) -> usize {
-        let (left, right) = gutters(area_width);
+        let (left, right) = gutters(area_width, self.gutter);
         let available = area_width.saturating_sub(left + right) as usize;
         self.max_width
             .map_or(available, |cap| available.min(cap))
@@ -382,7 +389,7 @@ impl App {
             )
         };
         let block = Block::bordered()
-            .border_type(BorderType::Rounded)
+            .border_set(self.theme.glyphs.border)
             .border_style(border)
             .title(Span::styled(format!(" {title} "), title_style));
         let inner = block.inner(panel);
@@ -426,7 +433,9 @@ impl App {
         };
         let edge = panel.right() - 1;
         for y in panel.y..panel.bottom() {
-            buf[(edge, y)].set_symbol("│").set_style(rule);
+            buf[(edge, y)]
+                .set_symbol(self.theme.glyphs.edge)
+                .set_style(rule);
         }
         let room = panel.width.saturating_sub(3) as usize;
         buf.set_stringn(panel.x + 1, panel.y, title, room, title_style);
@@ -448,7 +457,7 @@ impl App {
         label_style: Style,
     ) -> (ListItem<'static>, usize) {
         let lines = wrap_label(label, label_width(list_width, prefix, marker));
-        let continuation = continuation_prefix(prefix);
+        let continuation = self.continuation_prefix(prefix);
         let text: Vec<Line<'static>> = lines
             .iter()
             .enumerate()
@@ -481,7 +490,7 @@ impl App {
     ) {
         let list = List::new(items)
             .highlight_style(highlight)
-            .highlight_symbol(if focused { "▎" } else { " " });
+            .highlight_symbol(if focused { panel.glyphs.focus_bar } else { " " });
         StatefulWidget::render(list, panel.list_area, buf, &mut panel.list);
     }
 
@@ -565,11 +574,18 @@ impl App {
             .iter()
             .map(|row| {
                 let entry = &project.entries[row.index];
-                let label = if self.files_titles && !entry.is_dir {
+                let name = if self.files_titles && !entry.is_dir {
                     entry.title.clone().unwrap_or_else(|| entry.name.clone())
                 } else {
                     entry.name.clone()
                 };
+                let glyphs = &self.theme.glyphs;
+                let icon = match (entry.is_dir, row.collapsed) {
+                    (false, _) => glyphs.file,
+                    (true, false) => glyphs.folder_open,
+                    (true, true) => glyphs.folder_closed,
+                };
+                let label = format!("{icon}{name}");
                 let style = if current == Some(row.index) {
                     Style::new()
                         .fg(self.theme.accent)
@@ -620,7 +636,10 @@ impl App {
         let style = self.theme.status();
         buf.set_style(area, style);
         let (chip, chip_style) = match self.mode {
-            Mode::Search => (format!(" /{}▏ ", self.query), self.theme.search(false)),
+            Mode::Search => (
+                format!(" /{}{} ", self.query, self.theme.glyphs.cursor),
+                self.theme.search(false),
+            ),
             _ => (format!(" {} ", self.title()), self.theme.status_chip()),
         };
         let position = if self.layout.lines.len() <= self.view_height {
@@ -638,17 +657,28 @@ impl App {
             let n = self.current.map(|i| i + 1).unwrap_or(0);
             format!("/{}  {}/{}", self.query, n, self.matches.len())
         } else {
+            let (down, up) = (
+                self.keymap.first(Action::ScrollDown),
+                self.keymap.first(Action::ScrollUp),
+            );
             match self.focus {
-                Focus::Outline => "outline: j/k follow  space fold  Tab back".to_string(),
-                Focus::Files => "files: j/k move  Enter open  space fold  T titles".to_string(),
+                Focus::Outline => format!("outline: {down}/{up} follow  space fold  Tab back"),
+                Focus::Files => {
+                    format!("files: {down}/{up} move  Enter open  space fold  T titles")
+                }
                 Focus::Content => String::new(),
             }
         };
         let hints = if area.width >= 48 {
-            "? help  q quit  "
+            format!(
+                "{} help  {} quit  ",
+                self.keymap.first(Action::Help),
+                self.keymap.first(Action::Quit)
+            )
         } else {
-            ""
+            String::new()
         };
+        let hints = hints.as_str();
         let right_width = (width(hints) + width(&position) + 1) as u16;
         let right_x = area.x + area.width.saturating_sub(right_width);
         let chip_room = right_x.saturating_sub(area.x + 1) as usize;
@@ -675,22 +705,23 @@ impl App {
     }
 
     fn draw_help(&mut self, buf: &mut Buffer, area: Rect) {
-        let key_width = SECTIONS
+        let sections = self.keymap.sections();
+        let key_width = sections
             .iter()
-            .flat_map(|s| s.bindings)
+            .flat_map(|(_, rows)| rows)
             .map(|(k, _)| width(&keys::plain(k)))
             .max()
             .unwrap_or(0);
-        let mut lines: Vec<Line> = Vec::with_capacity(keys::help_rows());
-        for (i, section) in SECTIONS.iter().enumerate() {
+        let mut lines: Vec<Line> = Vec::with_capacity(self.help_rows());
+        for (i, (title, rows)) in sections.iter().enumerate() {
             if i > 0 {
                 lines.push(Line::default());
             }
             lines.push(Line::from(Span::styled(
-                format!(" {}", section.title),
+                format!(" {title}"),
                 self.theme.text().add_modifier(Modifier::BOLD),
             )));
-            for (k, action) in section.bindings {
+            for (k, action) in rows {
                 let k = keys::plain(k);
                 lines.push(Line::from(vec![
                     Span::styled(
@@ -708,12 +739,17 @@ impl App {
         let max_scroll = lines.len().saturating_sub(visible);
         self.help_scroll = self.help_scroll.min(max_scroll);
         let hint = if max_scroll > 0 {
-            " j/k scroll · any other key closes "
+            format!(
+                " {}/{} scroll {} any other key closes ",
+                self.keymap.first(Action::ScrollDown),
+                self.keymap.first(Action::ScrollUp),
+                self.theme.glyphs.dot
+            )
         } else {
-            " any key closes "
+            " any key closes ".to_string()
         };
         Clear.render(popup, buf);
-        let block = self.popup_block(" Keys ").title_bottom(self.hint(hint));
+        let block = self.popup_block(" Keys ").title_bottom(self.hint(&hint));
         Paragraph::new(lines)
             .block(block)
             .scroll((self.help_scroll as u16, 0))
@@ -746,17 +782,17 @@ impl App {
         Clear.render(popup, buf);
         let block = self
             .popup_block(" Contents ")
-            .title_bottom(self.hint(" Enter jump · Esc close "));
+            .title_bottom(self.hint(&format!(" Enter jump {} Esc close ", self.theme.glyphs.dot)));
         let list = List::new(items)
             .block(block)
             .highlight_style(self.theme.selected())
-            .highlight_symbol("▸ ");
+            .highlight_symbol(self.theme.glyphs.collapsed);
         StatefulWidget::render(list, popup, buf, &mut self.toc);
     }
 
     fn popup_block(&self, title: &str) -> Block<'static> {
         Block::bordered()
-            .border_type(BorderType::Rounded)
+            .border_set(self.theme.glyphs.border)
             .border_style(self.theme.overlay_border())
             .title(Span::styled(
                 title.to_string(),
@@ -766,6 +802,17 @@ impl App {
 
     fn hint(&self, text: &str) -> Line<'static> {
         Line::from(Span::styled(text.to_string(), self.theme.faint())).right_aligned()
+    }
+
+    fn continuation_prefix(&self, prefix: &str) -> String {
+        let glyphs = &self.theme.glyphs;
+        if let Some(head) = prefix.strip_suffix(glyphs.branch) {
+            format!("{head}{}", glyphs.pipe)
+        } else if let Some(head) = prefix.strip_suffix(glyphs.last) {
+            format!("{head}  ")
+        } else {
+            prefix.to_string()
+        }
     }
 }
 
@@ -787,21 +834,12 @@ fn wrap_label(label: &str, width: usize) -> Vec<String> {
     }
 }
 
-fn continuation_prefix(prefix: &str) -> String {
-    if let Some(head) = prefix.strip_suffix("├ ") {
-        format!("{head}│ ")
-    } else if let Some(head) = prefix.strip_suffix("└ ") {
-        format!("{head}  ")
-    } else {
-        prefix.to_string()
-    }
-}
-
-fn gutters(width: u16) -> (u16, u16) {
+/// Left and right gutters. The right one holds the scrollbar, so it never drops below one.
+fn gutters(width: u16, gutter: u16) -> (u16, u16) {
     match width {
         0..=29 => (0, 1),
-        30..=59 => (1, 1),
-        _ => (2, 2),
+        30..=59 => (gutter.min(1), 1),
+        _ => (gutter, gutter.max(1)),
     }
 }
 

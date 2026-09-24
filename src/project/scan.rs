@@ -3,7 +3,7 @@ use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
 use ignore::WalkBuilder;
 
-const EXTENSIONS: [&str; 5] = ["md", "markdown", "mdown", "mkd", "mdx"];
+pub const DEFAULT_EXTENSIONS: [&str; 5] = ["md", "markdown", "mdown", "mkd", "mdx"];
 const TITLE_SCAN_BYTES: usize = 8 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,12 +19,17 @@ pub struct Entry {
 pub struct Project {
     pub root: PathBuf,
     pub entries: Vec<Entry>,
+    pub extensions: Vec<String>,
 }
 
-pub fn is_markdown(path: &Path) -> bool {
+pub fn default_extensions() -> Vec<String> {
+    DEFAULT_EXTENSIONS.iter().map(ToString::to_string).collect()
+}
+
+pub fn is_markdown(path: &Path, extensions: &[String]) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
-        .is_some_and(|e| EXTENSIONS.iter().any(|x| x.eq_ignore_ascii_case(e)))
+        .is_some_and(|e| extensions.iter().any(|x| x.eq_ignore_ascii_case(e)))
 }
 
 pub fn display_path(path: &Path) -> String {
@@ -37,6 +42,10 @@ pub fn display_path(path: &Path) -> String {
 
 impl Project {
     pub fn scan(root: &Path) -> Self {
+        Self::scan_with(root, &default_extensions())
+    }
+
+    pub fn scan_with(root: &Path, extensions: &[String]) -> Self {
         let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
         let mut files: Vec<PathBuf> = WalkBuilder::new(&root)
             .follow_links(false)
@@ -44,7 +53,7 @@ impl Project {
             .build()
             .filter_map(Result::ok)
             .filter(|e| e.file_type().is_some_and(|t| t.is_file()))
-            .filter(|e| is_markdown(e.path()))
+            .filter(|e| is_markdown(e.path(), extensions))
             .filter_map(|e| e.path().strip_prefix(&root).ok().map(Path::to_path_buf))
             .collect();
         files.sort();
@@ -64,7 +73,11 @@ impl Project {
             title: None,
         }];
         tree.flatten(&root, PathBuf::new(), 1, &mut entries);
-        Self { root, entries }
+        Self {
+            root,
+            entries,
+            extensions: extensions.to_vec(),
+        }
     }
 
     pub fn files(&self) -> impl Iterator<Item = &Entry> {
@@ -255,7 +268,24 @@ mod tests {
         assert_eq!(title("Alpha.MD"), None);
         assert_eq!(project.entry_file(), Some(PathBuf::from("README.md")));
         assert_eq!(project.index_of(Path::new("docs/intro.markdown")), Some(4));
-        assert!(is_markdown(Path::new("x.MD")) && !is_markdown(Path::new("x.txt")));
+        let md = default_extensions();
+        assert!(is_markdown(Path::new("x.MD"), &md) && !is_markdown(Path::new("x.txt"), &md));
+    }
+
+    #[test]
+    fn scan_takes_the_configured_extensions() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.md"), "# A\n").unwrap();
+        std::fs::write(dir.path().join("b.txt"), "# B\n").unwrap();
+        let names = |exts: &[&str]| -> Vec<String> {
+            let exts: Vec<String> = exts.iter().map(ToString::to_string).collect();
+            Project::scan_with(dir.path(), &exts)
+                .files()
+                .map(|e| e.name.clone())
+                .collect()
+        };
+        assert_eq!(names(&["md"]), ["a.md"]);
+        assert_eq!(names(&["txt", "md"]), ["a.md", "b.txt"]);
     }
 
     #[test]

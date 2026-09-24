@@ -227,10 +227,12 @@ fn every_page_prints_without_site_only_syntax() {
             "{} contains raw HTML",
             page.display()
         );
+        let no_config = std::env::temp_dir().join("mido-tests-no-config");
         let output = Command::new(env!("CARGO_BIN_EXE_mido"))
             .args(["-p", "-w", "80"])
             .arg(&page)
             .env("NO_COLOR", "1")
+            .env("MIDO_CONFIG_DIR", &no_config)
             .output()
             .unwrap();
         assert!(output.status.success(), "mido -p {} failed", page.display());
@@ -276,5 +278,70 @@ fn bundled_docs_extract_to_a_project() {
     assert_eq!(
         project.entry_file().as_deref(),
         Some(std::path::Path::new("index.md"))
+    );
+}
+
+#[test]
+fn themes_page_matches_the_themes() {
+    let path = "docs/themes.md";
+    let file = std::fs::read_to_string(path).unwrap();
+    let start = file
+        .find("\n## Built-in themes")
+        .expect("docs/themes.md has a built-in themes section")
+        + 1;
+    let generated = mido::render::theme::markdown();
+    if std::env::var_os("MIDO_UPDATE_DOCS").is_some() {
+        std::fs::write(path, format!("{}{generated}", &file[..start])).unwrap();
+        return;
+    }
+    assert_eq!(
+        &file[start..],
+        generated,
+        "docs/themes.md is out of date with the built-in themes, run `just keys`"
+    );
+}
+
+#[test]
+fn config_and_theme_flags_reach_print_mode() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("config.toml"),
+        "glyphs = \"ascii\"\nwidth = 40\n",
+    )
+    .unwrap();
+    let run = |args: &[&str]| {
+        let output = Command::new(env!("CARGO_BIN_EXE_mido"))
+            .args(args)
+            .env("MIDO_CONFIG_DIR", dir.path())
+            .env_remove("NO_COLOR")
+            .output()
+            .unwrap();
+        (
+            output.status.success(),
+            String::from_utf8_lossy(&output.stdout).into_owned(),
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        )
+    };
+    let (ok, text, _) = run(&["tests/fixtures/lists.md"]);
+    assert!(ok);
+    assert!(text.is_ascii(), "the ascii tier from the config\n{text}");
+    assert!(
+        text.lines().all(|l| l.chars().count() <= 40),
+        "width 40\n{text}"
+    );
+
+    let (ok, text, _) = run(&["-p", "-t", "nord", "tests/fixtures/basic.md"]);
+    assert!(
+        ok && text.contains("\u{1b}["),
+        "print mode colors with a theme"
+    );
+
+    let (ok, _, err) = run(&["-t", "no-such-theme", "tests/fixtures/basic.md"]);
+    assert!(!ok && err.contains("no theme `no-such-theme`"), "{err}");
+
+    let (ok, text, _) = run(&["themes"]);
+    assert!(
+        ok && text.contains("tokyo-night") && text.contains("default dark"),
+        "{text}"
     );
 }

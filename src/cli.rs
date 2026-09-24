@@ -9,7 +9,7 @@ use clap::Parser;
     about = "Markdown In, Document Out. A terminal Markdown reader."
 )]
 pub struct Cli {
-    /// Markdown file or folder to read, - for stdin, or docs for the bundled documentation
+    /// Markdown file or folder to read, - for stdin, docs for the bundled documentation, or themes to list the themes
     pub path: Option<PathBuf>,
 
     /// Print styled text to stdout instead of opening the viewer
@@ -19,6 +19,14 @@ pub struct Cli {
     /// Cap the content width in columns (default: the full terminal width)
     #[arg(short, long, value_name = "COLS")]
     pub width: Option<usize>,
+
+    /// Theme by name or path to a theme file, or auto to follow the terminal background
+    #[arg(short, long, value_name = "NAME")]
+    pub theme: Option<String>,
+
+    /// Read this config file instead of the one in the config folder
+    #[arg(long, value_name = "FILE")]
+    pub config: Option<PathBuf>,
 
     /// Download remote images, cached in the user cache dir with a 10 MB cap
     #[arg(long)]

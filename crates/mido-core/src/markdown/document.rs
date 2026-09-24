@@ -231,16 +231,6 @@ impl Alert {
             Alert::Caution => "Caution",
         }
     }
-
-    pub fn icon(self) -> &'static str {
-        match self {
-            Alert::Note => "●",
-            Alert::Tip => "✦",
-            Alert::Important => "◆",
-            Alert::Warning => "▲",
-            Alert::Caution => "■",
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

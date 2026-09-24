@@ -1,3 +1,3 @@
 mod scan;
 
-pub use scan::{Entry, Project, display_path, is_markdown};
+pub use scan::{DEFAULT_EXTENSIONS, Entry, Project, default_extensions, display_path, is_markdown};

@@ -12,7 +12,7 @@ order: 2
 mido [OPTIONS] [PATH]
 ```
 
-`PATH` is a Markdown file, a folder, `-` for stdin, or `docs` for the bundled documentation. With no path, mido opens the current folder.
+`PATH` is a Markdown file, a folder, `-` for stdin, `docs` for the bundled documentation, or `themes` to list the themes. With no path, mido opens the current folder.
 
 ## Options
 
@@ -20,6 +20,8 @@ mido [OPTIONS] [PATH]
 | --- | --- |
 | `-p`, `--print` | Print styled text to stdout instead of opening the viewer |
 | `-w`, `--width <COLS>` | Cap the content width in columns. The default is the full terminal width |
+| `-t`, `--theme <NAME>` | Use a theme by name or a theme file by path, or `auto` to follow the terminal background |
+| `--config <FILE>` | Read this config file instead of the one in the config folder |
 | `--remote-images` | Download remote images and live badge values. Images are cached in the user cache directory with a 10 MB cap |
 | `--man` | Print the man page as roff to stdout |
 | `-h`, `--help` | Show the help |
@@ -34,12 +36,20 @@ mido                    # the current folder
 mido -                  # read Markdown from stdin
 mido -p README.md       # print styled text to stdout, pipe it to less -R
 mido -w 80 notes.md     # cap the width at 80 columns
+mido -t nord notes.md   # read in the Nord theme
+mido themes             # list the themes with a swatch of each
 mido docs               # read this documentation offline
 ```
 
 ## Width
 
 By default the text runs the full width of the terminal, with small gutters on each side. `--width` caps the measure and centers the column, for anyone who prefers a fixed reading width on a wide screen.
+
+## Themes and config
+
+`--theme` picks one of the [built-in themes](themes.md#built-in-themes), a theme from the user themes folder, or a theme file by path, for this run only. `mido themes` lists them all with their kind and a swatch of their colors, and marks the one the config selects. As with `docs`, a file or folder called `themes` in the current directory wins over the listing.
+
+Settings that last live in the [config file](configuration.md), and a `.mido.toml` in a project folder overrides it there. `--config` reads a different file, which is handy for trying a setup out. Flags always win over both files.
 
 ## Images
 

@@ -70,3 +70,5 @@ A single `-` reads the document from stdin. To send rendered output somewhere el
 ## Colors
 
 mido uses truecolor when the terminal advertises it through `COLORTERM`, and falls back to 256 colors otherwise. Setting `NO_COLOR` turns colors off and keeps the structure through bold, italic and rules.
+
+It also asks the terminal whether its background is light or dark and picks `mido-light` or `mido-dark` to match. `mido themes` lists the other built-in themes, and `--theme nord` tries one. To keep a choice, put it in the [config file](configuration.md), and see [Themes](themes.md) to write your own.

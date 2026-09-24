@@ -133,6 +133,7 @@ mod tests {
                 file("README.md", Some("mido")),
                 file("CHANGELOG.md", None),
             ],
+            ..Project::default()
         }
     }
 

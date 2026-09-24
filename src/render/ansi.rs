@@ -1,10 +1,9 @@
 use std::io::{self, Write};
 
 use crossterm::queue;
-use crossterm::style::{
-    Attribute, Color as CColor, SetAttribute, SetBackgroundColor, SetForegroundColor,
-};
-use ratatui::style::{Color, Modifier, Style};
+use crossterm::style::{Attribute, SetAttribute, SetBackgroundColor, SetForegroundColor};
+use ratatui::backend::IntoCrossterm;
+use ratatui::style::{Modifier, Style};
 use ratatui::text::Line;
 
 pub fn write(lines: &[Line<'_>], out: &mut impl Write, color: bool) -> io::Result<()> {
@@ -25,10 +24,10 @@ pub fn write(lines: &[Line<'_>], out: &mut impl Write, color: bool) -> io::Resul
 
 fn begin(out: &mut impl Write, style: Style) -> io::Result<()> {
     if let Some(fg) = style.fg {
-        queue!(out, SetForegroundColor(convert(fg)))?;
+        queue!(out, SetForegroundColor(fg.into_crossterm()))?;
     }
     if let Some(bg) = style.bg {
-        queue!(out, SetBackgroundColor(convert(bg)))?;
+        queue!(out, SetBackgroundColor(bg.into_crossterm()))?;
     }
     let attrs = [
         (Modifier::BOLD, Attribute::Bold),
@@ -43,28 +42,4 @@ fn begin(out: &mut impl Write, style: Style) -> io::Result<()> {
         }
     }
     Ok(())
-}
-
-fn convert(color: Color) -> CColor {
-    match color {
-        Color::Reset => CColor::Reset,
-        Color::Black => CColor::Black,
-        Color::Red => CColor::DarkRed,
-        Color::Green => CColor::DarkGreen,
-        Color::Yellow => CColor::DarkYellow,
-        Color::Blue => CColor::DarkBlue,
-        Color::Magenta => CColor::DarkMagenta,
-        Color::Cyan => CColor::DarkCyan,
-        Color::Gray => CColor::Grey,
-        Color::DarkGray => CColor::DarkGrey,
-        Color::LightRed => CColor::Red,
-        Color::LightGreen => CColor::Green,
-        Color::LightYellow => CColor::Yellow,
-        Color::LightBlue => CColor::Blue,
-        Color::LightMagenta => CColor::Magenta,
-        Color::LightCyan => CColor::Cyan,
-        Color::White => CColor::White,
-        Color::Rgb(r, g, b) => CColor::Rgb { r, g, b },
-        Color::Indexed(i) => CColor::AnsiValue(i),
-    }
 }

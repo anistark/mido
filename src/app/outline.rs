@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use crate::render::glyphs::Glyphs;
 use crate::render::layout::Heading;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,7 +69,7 @@ impl Tree {
         shown
     }
 
-    pub fn rows(&self, collapsed: &HashSet<usize>) -> Vec<Row> {
+    pub fn rows(&self, collapsed: &HashSet<usize>, glyphs: &Glyphs) -> Vec<Row> {
         (0..self.len())
             .filter(|&i| self.visible_ancestor(i, collapsed) == i)
             .map(|i| {
@@ -77,21 +78,21 @@ impl Tree {
                 for level in 1..depth {
                     let ancestor = (0..i).rev().find(|&j| self.depths[j] == level);
                     let open = ancestor.is_some_and(|a| self.has_later_sibling(a));
-                    prefix.push_str(if open { "│ " } else { "  " });
+                    prefix.push_str(if open { glyphs.pipe } else { "  " });
                 }
                 if depth > 0 {
                     prefix.push_str(if self.has_later_sibling(i) {
-                        "├ "
+                        glyphs.branch
                     } else {
-                        "└ "
+                        glyphs.last
                     });
                 }
                 let has_children = self.has_children(i);
                 let is_collapsed = has_children && collapsed.contains(&i);
                 let marker = match (has_children, is_collapsed) {
                     (false, _) => "  ",
-                    (true, false) => "▾ ",
-                    (true, true) => "▸ ",
+                    (true, false) => glyphs.expanded,
+                    (true, true) => glyphs.collapsed,
                 };
                 Row {
                     index: i,
@@ -127,7 +128,7 @@ mod tests {
 
     fn render(headings: &[Heading], collapsed: &HashSet<usize>) -> Vec<String> {
         Tree::new(headings)
-            .rows(collapsed)
+            .rows(collapsed, &Glyphs::UNICODE)
             .iter()
             .map(|r| format!("{}{}{}", r.prefix, r.marker, headings[r.index].text))
             .collect()

@@ -3,7 +3,7 @@ layout: layouts/page.njk
 title: FAQ
 description: Answers about colors, fonts, narrow terminals, pipes and what mido does not do yet.
 tags: docs
-order: 7
+order: 9
 ---
 
 # FAQ
@@ -18,7 +18,11 @@ mido picks truecolor when `COLORTERM` is `truecolor` or `24bit`, and 256 colors 
 
 ## Can I change the font?
 
-No. The terminal owns the font. mido draws with box-drawing characters, bullets and bars from the basic Unicode blocks that every modern terminal font covers. JetBrains Mono, Fira Code, Iosevka, Monaspace, SF Mono and Cascadia Code all render it well.
+No. The terminal owns the font. mido draws with box-drawing characters, bullets and bars from the basic Unicode blocks, and the [fonts table](themes.md#fonts) lists what each common font covers. If yours lacks box drawing, set `glyphs = "ascii"` in the [config](configuration.md). If it is a Nerd Font, `glyphs = "nerd"` adds icons.
+
+## Can I change the colors?
+
+Yes. Pick one of the [built-in themes](themes.md#built-in-themes) with `--theme` or `theme` in the config, or write your own. `mido themes` lists them.
 
 ## Why is my output plain when I redirect it?
 
@@ -42,4 +46,4 @@ Yes. `mido docs` opens this documentation from a copy bundled in the binary, so 
 
 ## Where is the config file?
 
-There is none yet. Themes, fonts and configuration are the theme of the 0.5 release. Until then the defaults are the design.
+`~/.config/mido/config.toml` on Linux and macOS, `%APPDATA%\mido\config\config.toml` on Windows, and a `.mido.toml` in a project folder overrides it. None is needed, and [Configuration](configuration.md) lists every setting.

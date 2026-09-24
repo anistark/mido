@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
-use ratatui::style::{Modifier, Style};
-use ratatui::text::{Line, Span};
+use ratatui_core::style::{Modifier, Style};
+use ratatui_core::text::{Line, Span};
 use unicode_width::UnicodeWidthChar;
 
 use super::badge::{self, BadgeText, Badges, Rgb};
+use super::glyphs::GlyphTier;
 use super::mermaid::{self, Kind};
 use super::syntax;
 use super::theme::{ColorMode, Theme};
@@ -14,7 +15,6 @@ use crate::markdown::{
     Slugger, Table, plain_text, slug,
 };
 
-const BULLETS: [&str; 3] = ["•", "◦", "▪"];
 pub const MAX_IMAGE_ROWS: u32 = 40;
 const MAX_LABEL_WIDTH: usize = 40;
 
@@ -181,7 +181,7 @@ fn sole_image(content: &[Inline]) -> Option<(&[Inline], &str)> {
     found
 }
 
-fn clip(text: &str, max: usize) -> String {
+fn clip(text: &str, max: usize, ellipsis: &str) -> String {
     let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
     if width(&text) <= max {
         return text;
@@ -196,7 +196,7 @@ fn clip(text: &str, max: usize) -> String {
         out.push(ch);
         used += cw;
     }
-    out.push('…');
+    out.push_str(ellipsis);
     out
 }
 
@@ -332,7 +332,7 @@ impl Renderer<'_> {
                     self.label_pieces(key, Some(value), (None, None), None, &mut pieces);
                 }
                 let mut first = self.prefix.clone();
-                first.push(Span::styled("▸ ", accent));
+                first.push(Span::styled(self.theme.glyphs.collapsed, accent));
                 self.first = Some(first);
                 self.prefix.push(Span::raw("  "));
                 for line in wrap(&pieces, self.avail()) {
@@ -343,7 +343,7 @@ impl Renderer<'_> {
             }
             FrontMatterView::Expanded => {
                 self.emit(vec![
-                    Span::styled("▾ ", accent),
+                    Span::styled(self.theme.glyphs.expanded, accent),
                     Span::styled("front matter", self.theme.muted()),
                 ]);
                 self.code_block(Some(meta.language()), &meta.text);
@@ -366,7 +366,7 @@ impl Renderer<'_> {
                 for line in wrap(&self.inlines(content, style), self.avail()) {
                     self.emit_line(line);
                 }
-                let rule = "━".repeat(self.avail());
+                let rule = self.theme.glyphs.heavy_rule.repeat(self.avail());
                 self.emit(vec![Span::styled(rule, self.theme.rule())]);
             }
             1 => {
@@ -392,7 +392,7 @@ impl Renderer<'_> {
                 for line in lines {
                     self.emit_line(line);
                 }
-                let rule = "─".repeat(widest.max(1));
+                let rule = self.theme.glyphs.rule.repeat(widest.max(1));
                 self.emit(vec![Span::styled(rule, self.theme.heading_rule())]);
             }
             _ => {
@@ -462,7 +462,7 @@ impl Renderer<'_> {
         let caption = plain_text(alt);
         if !caption.trim().is_empty() {
             let pieces = [
-                Piece::text("▣ ", Style::new().fg(self.theme.accent)),
+                Piece::text(self.theme.glyphs.image, self.theme.accent()),
                 Piece::text(caption, self.theme.faint().add_modifier(Modifier::ITALIC)),
             ];
             for line in wrap(&pieces, self.avail()) {
@@ -495,9 +495,9 @@ impl Renderer<'_> {
         link: Option<&LinkRef>,
         out: &mut Vec<Piece>,
     ) {
-        let label = clip(label, MAX_LABEL_WIDTH);
+        let label = clip(label, MAX_LABEL_WIDTH, self.theme.glyphs.ellipsis);
         let value = value
-            .map(|value| clip(value, MAX_LABEL_WIDTH))
+            .map(|value| clip(value, MAX_LABEL_WIDTH, self.theme.glyphs.ellipsis))
             .filter(|value| !value.is_empty());
         if self.theme.mode == ColorMode::Mono {
             let text = match &value {
@@ -612,14 +612,19 @@ impl Renderer<'_> {
                     );
                 }
                 Inline::Image { alt, url } => {
-                    out.push(Piece::text("▣ ", Style::new().fg(self.theme.accent)).with_link(link));
+                    out.push(
+                        Piece::text(self.theme.glyphs.image, self.theme.accent()).with_link(link),
+                    );
                     self.push_inlines(alt, style.add_modifier(Modifier::ITALIC), link, out);
                     out.push(
                         Piece::text(format!(" ({url})"), self.theme.link_url()).with_link(link),
                     );
                 }
                 Inline::FootnoteRef(label) => {
-                    let piece = Piece::atomic(footnote_label(label), self.theme.footnote());
+                    let piece = Piece::atomic(
+                        footnote_label(label, self.theme.glyphs.superscript),
+                        self.theme.footnote(),
+                    );
                     out.push(match link {
                         Some(_) => piece.with_link(link),
                         None => piece.linked_as(label, LinkKind::Footnote),
@@ -638,7 +643,11 @@ impl Renderer<'_> {
         let code = code.replace('\t', "    ");
         let inner = self.avail().saturating_sub(2).max(1);
         if lang == Some("mermaid")
-            && let Some(drawing) = mermaid::render(&code, inner.saturating_sub(8))
+            && let Some(drawing) = mermaid::render(
+                &code,
+                inner.saturating_sub(8),
+                self.theme.glyphs.tier == GlyphTier::Ascii,
+            )
             && drawing.width() + 8 <= inner
         {
             self.diagram(&drawing, inner);
@@ -660,10 +669,16 @@ impl Renderer<'_> {
                 span.style = span.style.bg(self.theme.code_bg);
             }
             let w: usize = spans.iter().map(|s| width(&s.content)).sum();
-            let mut row = vec![Span::styled("▎ ", self.theme.code_border())];
+            let mut row = vec![Span::styled(
+                self.theme.glyphs.bar,
+                self.theme.code_border(),
+            )];
             if w > inner {
                 row.extend(truncate(spans, inner - 1));
-                row.push(Span::styled("…", self.theme.faint().bg(self.theme.code_bg)));
+                row.push(Span::styled(
+                    self.theme.glyphs.ellipsis,
+                    self.theme.faint().bg(self.theme.code_bg),
+                ));
             } else {
                 row.extend(spans);
                 let mut pad = inner - w;
@@ -705,7 +720,7 @@ impl Renderer<'_> {
         for (i, spans) in rows.into_iter().enumerate() {
             let used: usize = spans.iter().map(|s| width(&s.content)).sum();
             let mut row = vec![
-                Span::styled("▎ ", self.theme.code_border()),
+                Span::styled(self.theme.glyphs.bar, self.theme.code_border()),
                 Span::styled(" ", block_style),
             ];
             row.extend(spans);
@@ -727,15 +742,18 @@ impl Renderer<'_> {
         let tight = self.tight;
         match alert {
             Some(kind) => {
-                self.push_prefix(Span::styled("▎ ", self.theme.alert_bar(kind)));
+                self.push_prefix(Span::styled(
+                    self.theme.glyphs.bar,
+                    self.theme.alert_bar(kind),
+                ));
                 self.emit(vec![Span::styled(
-                    format!("{} {}", kind.icon(), kind.label()),
+                    format!("{} {}", self.theme.glyphs.alert(kind), kind.label()),
                     self.theme.alert_title(kind),
                 )]);
                 self.base = self.theme.text();
             }
             None => {
-                self.push_prefix(Span::styled("▎ ", self.theme.quote_bar()));
+                self.push_prefix(Span::styled(self.theme.glyphs.bar, self.theme.quote_bar()));
                 self.base = self.theme.quote();
             }
         }
@@ -777,10 +795,10 @@ impl Renderer<'_> {
                 self.blank();
             }
             let marker = match (item.task, list.start) {
-                (Some(true), _) => "☑ ".to_string(),
-                (Some(false), _) => "☐ ".to_string(),
+                (Some(true), _) => self.theme.glyphs.task_done.to_string(),
+                (Some(false), _) => self.theme.glyphs.task_open.to_string(),
                 (None, Some(start)) => format!("{:>num_width$} ", format!("{}.", start + i as u64)),
-                (None, None) => format!("{} ", BULLETS[depth % BULLETS.len()]),
+                (None, None) => format!("{} ", self.theme.glyphs.bullet(depth)),
             };
             let indent = " ".repeat(width(&marker));
             let marker_style = if item.task == Some(true) {
@@ -871,9 +889,13 @@ impl Renderer<'_> {
             s.push_str(r);
             vec![Span::styled(s, border)]
         };
-        let top = rule("┌", "─", "┬", "┐");
-        let mid = rule("┝", "━", "┿", "┥");
-        let bottom = rule("└", "─", "┴", "┘");
+        let glyphs = self.theme.glyphs.table;
+        let [l, f, m, r] = glyphs.top;
+        let top = rule(l, f, m, r);
+        let [l, f, m, r] = glyphs.header;
+        let mid = rule(l, f, m, r);
+        let [l, f, m, r] = glyphs.bottom;
+        let bottom = rule(l, f, m, r);
 
         self.emit(top);
         self.table_row(
@@ -904,7 +926,8 @@ impl Renderer<'_> {
             .collect();
         let height = wrapped.iter().map(Vec::len).max().unwrap_or(0).max(1);
         for i in 0..height {
-            let mut spans = vec![Span::styled("│", border)];
+            let vertical = self.theme.glyphs.table.vertical;
+            let mut spans = vec![Span::styled(vertical, border)];
             let mut links: Vec<LinkSpan> = Vec::new();
             let mut col = 1;
             for (c, w) in widths.iter().enumerate() {
@@ -932,7 +955,7 @@ impl Renderer<'_> {
                 col += used;
                 spans.push(Span::raw(" ".repeat(right + 1)));
                 col += right + 1;
-                spans.push(Span::styled("│", border));
+                spans.push(Span::styled(vertical, border));
                 col += 1;
             }
             if let Some(band) = band {
@@ -945,7 +968,7 @@ impl Renderer<'_> {
     }
 
     fn rule(&mut self) {
-        let line = "─".repeat(self.avail());
+        let line = self.theme.glyphs.rule.repeat(self.avail());
         self.emit(vec![Span::styled(line, self.theme.rule())]);
     }
 
@@ -972,7 +995,10 @@ impl Renderer<'_> {
         self.rule();
         for note in footnotes {
             self.blank();
-            let marker = format!("{} ", footnote_label(&note.label));
+            let marker = format!(
+                "{} ",
+                footnote_label(&note.label, self.theme.glyphs.superscript)
+            );
             let indent = " ".repeat(width(&marker));
             let mut first = self.prefix.clone();
             first.push(Span::styled(marker, self.theme.footnote()));
@@ -1039,9 +1065,9 @@ fn truncate(spans: Vec<Span<'static>>, max: usize) -> Vec<Span<'static>> {
     out
 }
 
-pub fn footnote_label(label: &str) -> String {
+pub fn footnote_label(label: &str, superscript: bool) -> String {
     const SUPERSCRIPT: [char; 10] = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'];
-    if !label.is_empty() && label.bytes().all(|b| b.is_ascii_digit()) {
+    if superscript && !label.is_empty() && label.bytes().all(|b| b.is_ascii_digit()) {
         label
             .bytes()
             .map(|b| SUPERSCRIPT[(b - b'0') as usize])
@@ -1057,8 +1083,9 @@ mod tests {
 
     #[test]
     fn numeric_footnotes_become_superscripts() {
-        assert_eq!(footnote_label("1"), "¹");
-        assert_eq!(footnote_label("12"), "¹²");
-        assert_eq!(footnote_label("note"), "[note]");
+        assert_eq!(footnote_label("1", true), "¹");
+        assert_eq!(footnote_label("12", true), "¹²");
+        assert_eq!(footnote_label("note", true), "[note]");
+        assert_eq!(footnote_label("1", false), "[1]");
     }
 }

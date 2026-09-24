@@ -37,7 +37,7 @@ The tables below are generated from the keymap in the source, so they cannot dri
 | `Tab` / `Shift-Tab` | Cycle focus between the panes |
 | `Tab` then `←` / `→` | Move focus in that direction |
 | `l` | Focus the pane to the right |
-| `j` / `k` in a panel | Move, Enter opens or returns |
+| `j` / `k`, `↓` / `↑` in a panel | Move, Enter opens or returns |
 | `Space`, `←` / `→` in a panel | Fold, collapse / expand a folder or section |
 | `-` / `=` in a panel | Fold all / unfold all |
 | `T` in the files panel | Show titles instead of file names |
@@ -63,5 +63,48 @@ The tables below are generated from the keymap in the source, so they cannot dri
 
 | Key | Action |
 | --- | --- |
-| `h`, `?` | This help |
+| `?`, `h` | This help |
 | `q` | Quit |
+
+## Remapping
+
+Every key above that is not fixed can be bound in the `[keys]` table of the [config file](configuration.md). An action listed there loses its default keys, and a key it takes is removed from the action that had it. An empty list unbinds the action.
+
+```toml
+[keys]
+scroll_down = ["j", "down", "ctrl-n"]
+quit = ["q", "ctrl-q"]
+images = []
+```
+
+Keys are written as a single character, which keeps its case, a name (`space`, `enter`, `esc`, `tab`, `backspace`, `up`, `down`, `left`, `right`, `pageup`, `pagedown`, `home`, `end`, `f1` to `f12`), or either with a `ctrl-` or `alt-` prefix. `Esc`, `Tab`, `Ctrl-c` and the panel keys are fixed. `Enter`, `PgDn`, `PgUp`, `Home` and `End` scroll, page and jump unless a binding takes them.
+
+| Action | Default | What it does |
+| --- | --- | --- |
+| `scroll_down` | `j`, `↓` | Scroll down one line, move down in a panel or list |
+| `scroll_up` | `k`, `↑` | Scroll up one line, move up in a panel or list |
+| `half_page_down` | `Ctrl-d` | Half page down |
+| `half_page_up` | `Ctrl-u` | Half page up |
+| `page_down` | `Ctrl-f`, `Space` | Page down |
+| `page_up` | `Ctrl-b` | Page up |
+| `top` | `g` | Go to the top |
+| `bottom` | `G` | Go to the bottom |
+| `toc` | `t` | Table of contents |
+| `images` | `i` | Show or hide images |
+| `front_matter` | `m` | Expand or collapse the front matter |
+| `reload` | `r` | Reload the file |
+| `files` | `b` | Toggle the files panel |
+| `outline` | `o` | Toggle the outline panel |
+| `focus_mode` | `f` | Focus mode |
+| `focus_right` | `l` | Focus the pane to the right |
+| `next_link` | `]` | Select the next link |
+| `prev_link` | `[` | Select the previous link |
+| `back` | `H` | Back through visited pages |
+| `forward` | `L` | Forward through visited pages |
+| `finder` | `Ctrl-p` | Find a file in the folder |
+| `search` | `/` | Search |
+| `next_match` | `n` | Next match |
+| `prev_match` | `N` | Previous match |
+| `edit` | `E` | Edit the file in $EDITOR |
+| `help` | `?`, `h` | Key help |
+| `quit` | `q` | Quit |

@@ -34,6 +34,7 @@ mido                    # the current folder
 mido -                  # read Markdown from stdin
 mido -p README.md       # print styled text to stdout, pipe it to less -R
 mido -w 80 notes.md     # cap the width (default: full terminal width)
+mido -t nord notes.md   # pick a theme, mido themes lists them
 mido docs               # read the bundled documentation offline
 ```
 
@@ -67,7 +68,7 @@ Piping without `-p` prints plain text, so `mido file.md > out.txt` never leaks e
 | `i` | Show or hide images |
 | `m` | Expand or collapse the front matter |
 | `r` | Reload |
-| `h`, `?` | Help |
+| `?`, `h` | Help |
 | `q` | Quit |
 
 The file is watched, so edits in another window show up as you save. In a folder the whole tree is watched, and new or removed files appear in the files panel.
@@ -75,6 +76,10 @@ The file is watched, so edits in another window show up as you save. In a folder
 Open a folder and mido lists its Markdown files in a sidebar on the left headed by the folder's name, the tree hanging from it with folders first, honouring `.gitignore` and skipping hidden files. It starts on README.md, then index.md, then the first file. Relative links open in place, `#anchors` jump to their heading, and web links open in your browser. `H` and `L` walk back and forward through what you have visited.
 
 On terminals wide enough an outline of the headings sits in a tinted card at the top right, and the text wraps before it. It follows your reading position. Press `Tab` or `l` to move into it, `j` / `k` to jump between sections, `Space` to fold a section, and `Tab` or `Enter` to come back. `Shift-Tab` moves the other way, into the files sidebar.
+
+## Themes and config
+
+mido picks a light or dark theme to match the terminal. Eleven are built in, from Catppuccin, Gruvbox, Nord, Tokyo Night, Dracula and Solarized to a warm paper palette for long reads, and `mido themes` shows a swatch of each. A theme is a short TOML file, so writing your own takes a few lines. The glyph set (`ascii`, `unicode` or `nerd`), the width and gutters, the keys and the Markdown extensions live in `~/.config/mido/config.toml`, and a `.mido.toml` in a project folder overrides it. See [Themes](docs/themes.md) and [Configuration](docs/configuration.md).
 
 ## What renders
 
