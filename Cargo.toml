@@ -2,7 +2,7 @@
 members = ["crates/mido-core"]
 
 [workspace.package]
-version = "0.4.1"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.93"
 license = "MIT"
@@ -46,7 +46,7 @@ directories = "6.0.0"
 ignore = "0.4.33"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 include_dir = "0.7.4"
-mido-core = { path = "crates/mido-core", version = "0.4.1" }
+mido-core = { path = "crates/mido-core", version = "0.5.0" }
 notify = "8.2.0"
 nucleo-matcher = "0.3.1"
 open = "5.4.4"

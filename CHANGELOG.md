@@ -2,7 +2,7 @@
 
 All notable changes to mido are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com), and versions follow semver. Before 1.0, a minor release may change keys or configuration.
 
-## [Unreleased]
+## [0.5.0] - 2026-09-25
 
 ### Added
 
@@ -24,6 +24,7 @@ All notable changes to mido are recorded here. The format follows [Keep a Change
 - The parse, layout and theme code moved into a `mido-core` crate with no terminal dependency, published alongside `mido`, so other tools can embed the renderer.
 - The help overlay lists both keys of a pair, so the panel row reads `j / k, ↓ / ↑ in a panel`, and `?` is listed before `h`.
 - CI fails on a raw color outside the theme module.
+- A table too wide for the screen keeps its short columns, 20 cells or less, on one line and shares the rest of the width in proportion to how much each column has to say, so a prose column no longer shrinks to the size of a label column.
 
 ## [0.4.1] - 2026-09-21
 

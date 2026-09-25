@@ -77,7 +77,7 @@ Fenced and indented code blocks sit on a tinted background behind a left bar, wi
 
 ## Tables
 
-GFM tables are drawn with light box characters, a bold header row on a surface band and a heavy line under it. Column alignment from the source is honoured, and long cells wrap inside their column instead of pushing the table wider than the screen.
+GFM tables are drawn with light box characters, a bold header row on a surface band and a heavy line under it. Column alignment from the source is honoured, and long cells wrap inside their column instead of pushing the table wider than the screen. When a table does not fit, short columns of 20 cells or less stay on one line and the longer columns share what is left in proportion to their content, so a column of prose gets most of the room.
 
 ## Rules and raw HTML
 

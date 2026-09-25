@@ -6,7 +6,6 @@
   --t-body: 1.125rem;
   --t-caption: 0.875rem;
   --lh-body: 1.65;
-  --measure: 62ch;
 
   --night: #07130f;
   --night-deep: #040a08;
@@ -36,6 +35,7 @@
   --intermission: 112px;
 
   --topbar: 88px;
+  --gutter: clamp(20px, 5vw, 96px);
 }
 
 * { box-sizing: border-box; }
@@ -178,8 +178,7 @@ body {
   position: sticky;
   top: 12px;
   z-index: 20;
-  max-width: 1240px;
-  margin: 12px auto 0;
+  margin: 12px var(--gutter) 0;
   padding: 10px 22px;
   display: flex;
   align-items: center;
@@ -268,14 +267,10 @@ body {
 /* Landing */
 
 .landing {
-  max-width: 1240px;
-  margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 var(--gutter);
 }
 
 .hero { padding: var(--act) 0 0; }
-
-.hero-copy { max-width: 66ch; }
 
 .hero-icon {
   display: block;
@@ -304,7 +299,6 @@ body {
 
 .hero-blurb {
   margin: var(--frame) 0 0;
-  max-width: var(--measure);
   color: var(--ink-2);
 }
 
@@ -523,7 +517,6 @@ body {
 
 .section-lead {
   margin: var(--gate) 0 0;
-  max-width: var(--measure);
   color: var(--ink-2);
 }
 
@@ -669,9 +662,7 @@ body {
 /* Docs shell */
 
 .shell {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: var(--reel) 20px var(--act);
+  padding: var(--reel) var(--gutter) var(--act);
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr) 250px;
   gap: var(--act);
@@ -708,7 +699,7 @@ body {
 
 .files-list [aria-current] a { color: var(--green); }
 
-.doc { max-width: 76ch; min-width: 0; }
+.doc { min-width: 0; }
 
 .outline-col { position: sticky; top: var(--topbar); }
 
@@ -794,9 +785,6 @@ body {
 .prose h3::before { content: "### "; color: var(--ink-3); font-weight: 400; }
 
 .prose h4 { margin: var(--reel) 0 var(--frame); font-size: 1.0625rem; font-weight: 600; }
-
-.prose p,
-.prose li { max-width: var(--measure); }
 
 .prose p { margin: 0 0 1.2em; }
 
@@ -973,6 +961,8 @@ body {
 
 .kbd-page td:first-child { white-space: nowrap; }
 
+#built-in-themes + .table-wrap :is(th, td):not(:last-child) { white-space: nowrap; }
+
 /* Pager */
 
 .pager {
@@ -1009,9 +999,8 @@ body {
 /* Footer */
 
 .site-foot {
-  max-width: 1240px;
-  margin: var(--intermission) auto 0;
-  padding: var(--reel) 20px;
+  margin: var(--intermission) var(--gutter) 0;
+  padding: var(--reel) 0;
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -1065,9 +1054,8 @@ body {
 }
 
 @media (max-width: 640px) {
-  :root { --act: 44px; --intermission: 80px; }
+  :root { --act: 44px; --intermission: 80px; --gutter: 16px; }
   body { font-size: 1rem; }
-  .landing, .shell { padding-left: 16px; padding-right: 16px; }
   .term-body { grid-template-columns: minmax(0, 1fr); }
   .term-files { display: none; }
   .term-doc { padding: 14px 16px; overflow-x: auto; }
@@ -1075,7 +1063,8 @@ body {
   .pager { flex-direction: column; }
   .pager-next { margin-left: 0; }
   .prose pre { font-size: 0.875rem; }
-  .kbd-page td:first-child { white-space: normal; }
+  .kbd-page td:first-child,
+  #built-in-themes + .table-wrap :is(th, td):not(:last-child) { white-space: normal; }
 }
 
 @media (prefers-reduced-motion: reduce) {

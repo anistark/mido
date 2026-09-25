@@ -179,7 +179,7 @@ fn images_reserve_rows_when_sizes_are_known() {
 
 #[test]
 fn lines_never_exceed_the_width() {
-    for name in ["basic", "lists", "quotes", "code"] {
+    for name in ["basic", "lists", "tables", "quotes", "code"] {
         for width in [20, 33, 47, 80, 120] {
             for line in render(name, width) {
                 assert!(

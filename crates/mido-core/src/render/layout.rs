@@ -17,6 +17,7 @@ use crate::markdown::{
 
 pub const MAX_IMAGE_ROWS: u32 = 40;
 const MAX_LABEL_WIDTH: usize = 40;
+const SHORT_COLUMN: usize = 20;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FrontMatterView {
@@ -861,21 +862,7 @@ impl Renderer<'_> {
             }
         }
         let inner = self.avail().saturating_sub(3 * ncols + 1);
-        let mut widths = max_w;
-        let mut excess = widths.iter().sum::<usize>().saturating_sub(inner);
-        while excess > 0 {
-            let candidate = (0..ncols)
-                .filter(|&c| widths[c] > min_w[c])
-                .max_by_key(|&c| widths[c])
-                .or_else(|| {
-                    (0..ncols)
-                        .filter(|&c| widths[c] > 1)
-                        .max_by_key(|&c| widths[c])
-                });
-            let Some(c) = candidate else { break };
-            widths[c] -= 1;
-            excess -= 1;
-        }
+        let widths = column_widths(&max_w, &min_w, inner);
 
         let border = self.theme.table_border();
         let rule = |l: &str, fill: &str, m: &str, r: &str| -> Vec<Span<'static>> {
@@ -1014,6 +1001,71 @@ impl Renderer<'_> {
     }
 }
 
+/// Fits columns into `inner` cells the way a browser lays out a table,
+/// except that a column no wider than `SHORT_COLUMN` keeps its cells on one
+/// line while the other columns still get their longest word.
+fn column_widths(max_w: &[usize], min_w: &[usize], inner: usize) -> Vec<usize> {
+    let ncols = max_w.len();
+    if max_w.iter().sum::<usize>() <= inner {
+        return max_w.to_vec();
+    }
+    let short: Vec<bool> = max_w.iter().map(|&w| w <= SHORT_COLUMN).collect();
+    let floor = |c: usize| if short[c] { max_w[c] } else { min_w[c] };
+    let all: Vec<usize> = (0..ncols).collect();
+    let rest: Vec<usize> = all.iter().copied().filter(|&c| !short[c]).collect();
+    let pinned = (0..ncols).map(floor).sum::<usize>();
+    let mut widths = min_w.to_vec();
+    if !rest.is_empty() && pinned <= inner {
+        for (c, w) in widths.iter_mut().enumerate() {
+            *w = floor(c);
+        }
+        share(&mut widths, max_w, &rest, inner - pinned);
+        return widths;
+    }
+    let least = min_w.iter().sum::<usize>();
+    if least <= inner {
+        share(&mut widths, max_w, &all, inner - least);
+        return widths;
+    }
+    let mut excess = least - inner;
+    while excess > 0 {
+        let widest = |keep_short: bool| {
+            (0..ncols)
+                .filter(|&c| widths[c] > 1 && !(keep_short && short[c]))
+                .max_by_key(|&c| widths[c])
+        };
+        let Some(c) = widest(true).or_else(|| widest(false)) else {
+            break;
+        };
+        widths[c] -= 1;
+        excess -= 1;
+    }
+    widths
+}
+
+/// Hands `spare` cells to `cols` in proportion to how far each is below its
+/// `max_w`, the way a browser grows auto-sized columns.
+fn share(widths: &mut [usize], max_w: &[usize], cols: &[usize], spare: usize) {
+    let room = |c: usize, widths: &[usize]| max_w[c].saturating_sub(widths[c]);
+    let total: usize = cols.iter().map(|&c| room(c, widths)).sum();
+    if total == 0 {
+        return;
+    }
+    let spare = spare.min(total);
+    let mut given = 0;
+    let mut remainders = Vec::with_capacity(cols.len());
+    for &c in cols {
+        let part = room(c, widths) * spare;
+        widths[c] += part / total;
+        given += part / total;
+        remainders.push((part % total, c));
+    }
+    remainders.sort_by_key(|&(r, _)| std::cmp::Reverse(r));
+    for &(_, c) in remainders.iter().take(spare - given) {
+        widths[c] += 1;
+    }
+}
+
 fn pieces_width(pieces: &[Piece]) -> usize {
     pieces
         .iter()
@@ -1079,7 +1131,7 @@ pub fn footnote_label(label: &str, superscript: bool) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::footnote_label;
+    use super::{column_widths, footnote_label};
 
     #[test]
     fn numeric_footnotes_become_superscripts() {
@@ -1087,5 +1139,40 @@ mod tests {
         assert_eq!(footnote_label("12", true), "¹²");
         assert_eq!(footnote_label("note", true), "[note]");
         assert_eq!(footnote_label("1", false), "[1]");
+    }
+
+    #[test]
+    fn columns_that_fit_keep_their_natural_width() {
+        assert_eq!(column_widths(&[10, 30], &[5, 8], 60), [10, 30]);
+    }
+
+    #[test]
+    fn short_columns_stay_on_one_line_and_the_prose_column_takes_the_rest() {
+        assert_eq!(
+            column_widths(&[16, 5, 22, 160], &[16, 5, 22, 33], 87),
+            [16, 5, 22, 44]
+        );
+        assert_eq!(column_widths(&[11, 11, 90], &[6, 5, 18], 50), [11, 11, 28]);
+    }
+
+    #[test]
+    fn long_columns_grow_in_proportion_to_their_room() {
+        assert_eq!(
+            column_widths(&[32, 57, 11, 95], &[9, 12, 6, 18], 87),
+            [15, 23, 11, 38]
+        );
+    }
+
+    #[test]
+    fn short_columns_wrap_before_a_long_one_drops_below_its_longest_word() {
+        assert_eq!(column_widths(&[18, 60], &[4, 30], 40), [6, 34]);
+    }
+
+    #[test]
+    fn a_table_wider_than_its_words_shrinks_the_long_columns_first() {
+        assert_eq!(
+            column_widths(&[18, 5, 22, 160], &[18, 5, 22, 33], 57),
+            [18, 5, 17, 17]
+        );
     }
 }

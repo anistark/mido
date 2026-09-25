@@ -15,3 +15,13 @@ expression: "render(name, 60).join(\"\\n\")"
 │ a cell containing a long run of words that has  │  code  │
 │ to wrap across several lines in a narrow column │        │
 └─────────────────────────────────────────────────┴────────┘
+
+┌────────────────┬─────────────┬───────────────────────────┐
+│ Font           │ Tier        │ Notes                     │
+┝━━━━━━━━━━━━━━━━┿━━━━━━━━━━━━━┿━━━━━━━━━━━━━━━━━━━━━━━━━━━┥
+│ Monaco,        │ Every glyph │ Old fonts without the     │
+│ Courier New,   │             │ newer box drawing, so     │
+│ Andale Mono    │             │ pick the ascii tier       │
+│                │             │ instead                   │
+│ Menlo          │ No          │ Complete coverage         │
+└────────────────┴─────────────┴───────────────────────────┘
