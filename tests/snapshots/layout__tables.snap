@@ -6,6 +6,7 @@ expression: "render(name, 60).join(\"\\n\")"
 │ Name           │  Role  │                   Notes │
 ┝━━━━━━━━━━━━━━━━┿━━━━━━━━┿━━━━━━━━━━━━━━━━━━━━━━━━━┥
 │ ratatui        │  TUI   │            The standard │
+│                │        │                         │
 │ pulldown-cmark │ parser │ Fast, gives byte ranges │
 └────────────────┴────────┴─────────────────────────┘
 
@@ -23,5 +24,6 @@ expression: "render(name, 60).join(\"\\n\")"
 │ Courier New,   │             │ newer box drawing, so     │
 │ Andale Mono    │             │ pick the ascii tier       │
 │                │             │ instead                   │
+│                │             │                           │
 │ Menlo          │ No          │ Complete coverage         │
 └────────────────┴─────────────┴───────────────────────────┘

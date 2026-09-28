@@ -892,7 +892,10 @@ impl Renderer<'_> {
             Some(self.theme.table_band()),
         );
         self.emit(mid);
-        for row in &rows {
+        for (i, row) in rows.iter().enumerate() {
+            if i > 0 {
+                self.table_gap(&widths);
+            }
             self.table_row(row, &widths, &table.alignments, None);
         }
         self.emit(bottom);
@@ -952,6 +955,17 @@ impl Renderer<'_> {
             }
             self.emit_with(spans, links);
         }
+    }
+
+    fn table_gap(&mut self, widths: &[usize]) {
+        let border = self.theme.table_border();
+        let vertical = self.theme.glyphs.table.vertical;
+        let mut spans = vec![Span::styled(vertical, border)];
+        for w in widths {
+            spans.push(Span::raw(" ".repeat(w + 2)));
+            spans.push(Span::styled(vertical, border));
+        }
+        self.emit(spans);
     }
 
     fn rule(&mut self) {

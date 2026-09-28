@@ -2,6 +2,12 @@
 
 All notable changes to mido are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com), and versions follow semver. Before 1.0, a minor release may change keys or configuration.
 
+## [Unreleased]
+
+### Changed
+
+- Table body rows are separated by a blank row inside the borders, so a cell that wraps no longer runs into the next row.
+
 ## [0.5.0] - 2026-09-25
 
 ### Added
