@@ -560,6 +560,84 @@ fn long_panel_entries_wrap_and_stay_clickable() {
     assert!(screen(&mut app, &mut terminal).contains("Found it"));
 }
 
+fn click(app: &mut App, screen: &str, text: &str) {
+    let (row, line) = screen
+        .lines()
+        .enumerate()
+        .find(|(_, l)| l.contains(text))
+        .unwrap_or_else(|| panic!("{text} not on screen:\n{screen}"));
+    let column = line[..line.find(text).unwrap()].chars().count() - 1;
+    app.mouse_event(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: column as u16,
+        row: row as u16,
+        modifiers: KeyModifiers::NONE,
+    });
+}
+
+fn top_item(screen: &str) -> Option<usize> {
+    let line = content_line(screen, 0);
+    let rest = &line[line.find("item ")? + 5..];
+    rest.split(|c: char| !c.is_ascii_digit())
+        .next()?
+        .parse()
+        .ok()
+}
+
+#[test]
+fn clicking_a_panel_row_hands_the_keys_back_to_the_document() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("docs");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("README.md"), "# Home\n\nStart here.\n").unwrap();
+    let mut long = String::from("# Long\n");
+    for (part, name) in ["one", "two", "three"].iter().enumerate() {
+        long.push_str(&format!("\n## Part {name}\n\n"));
+        for i in 1..=60 {
+            long.push_str(&format!("- item {}\n", part * 60 + i));
+        }
+    }
+    std::fs::write(root.join("long.md"), long).unwrap();
+    let project = Project::scan(&root);
+    let file = project.entry_file();
+    let source = Source::Project { project, file };
+    let text = source.read().unwrap();
+    let mut app = App::new(source, &text, None);
+    let mut terminal = Terminal::new(TestBackend::new(140, 30)).unwrap();
+
+    let out = screen(&mut app, &mut terminal);
+    click(&mut app, &out, "long.md");
+    assert!(app.current_file().unwrap().ends_with("long.md"));
+    screen(&mut app, &mut terminal);
+    for _ in 0..30 {
+        press(&mut app, KeyCode::Down);
+    }
+    let out = screen(&mut app, &mut terminal);
+    let after_file =
+        top_item(&out).unwrap_or_else(|| panic!("Down should scroll the file:\n{out}"));
+
+    click(&mut app, &out, "Part two");
+    let out = screen(&mut app, &mut terminal);
+    assert!(content_line(&out, 0).contains("Part two"), "{out}");
+    for _ in 0..10 {
+        app.mouse_event(MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: 70,
+            row: 15,
+            modifiers: KeyModifiers::NONE,
+        });
+    }
+    let wheeled = top_item(&screen(&mut app, &mut terminal)).unwrap();
+    assert!(wheeled > after_file && wheeled > 60, "{wheeled}");
+    press(&mut app, KeyCode::Down);
+    let out = screen(&mut app, &mut terminal);
+    assert_eq!(
+        top_item(&out),
+        Some(wheeled + 1),
+        "Down after an outline click scrolls one line from where the wheel left off:\n{out}"
+    );
+}
+
 #[test]
 fn footnote_popup_and_front_matter_toggle() {
     let text = std::fs::read_to_string("tests/fixtures/rich.md").unwrap();

@@ -47,7 +47,7 @@ Long entries wrap onto continuation lines instead of being clipped, with the tre
 
 `Tab` cycles focus through the files sidebar, the document and the outline, in that order, and wraps around. `Shift-Tab` goes the other way. An arrow key pressed right after `Tab` moves in that direction instead. `l` moves to the pane on the right.
 
-The focused panel shows its border or rule in the accent color. `Enter` or `Tab` from a panel brings focus back to the document.
+The focused panel shows its border or rule in the accent color. `Enter` or `Tab` from a panel brings focus back to the document, and so does clicking a file or a heading. Clicking a folder or a fold marker leaves focus on the panel.
 
 ## Focus mode
 

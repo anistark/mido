@@ -1427,10 +1427,11 @@ impl App {
                     if let Some((row, on_marker)) = self.outline.row_at(&mouse) {
                         if on_marker {
                             self.outline.toggle(row);
+                            self.focus = Focus::Outline;
                         } else {
                             self.outline_set(row);
+                            self.focus = Focus::Content;
                         }
-                        self.focus = Focus::Outline;
                     }
                 }
                 _ => {}
@@ -1442,12 +1443,12 @@ impl App {
                 MouseEventKind::Down(MouseButton::Left) => {
                     if let Some((row, on_marker)) = self.files.row_at(&mouse) {
                         self.files.list.select(Some(row));
+                        self.focus = Focus::Files;
                         if on_marker {
                             self.files.toggle(row);
-                        } else {
-                            self.open_entry(row);
+                        } else if self.open_entry(row) {
+                            self.focus = Focus::Content;
                         }
-                        self.focus = Focus::Files;
                     }
                 }
                 _ => {}

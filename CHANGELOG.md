@@ -8,6 +8,10 @@ All notable changes to mido are recorded here. The format follows [Keep a Change
 
 - Table body rows are separated by a blank row inside the borders, so a cell that wraps no longer runs into the next row.
 
+### Fixed
+
+- Clicking a file in the files sidebar or a heading in the outline hands the keys back to the document, as `Enter` does. Before, focus stayed on the panel, so the arrow keys moved the panel selection instead of scrolling, and after an outline click `Down` jumped to the next heading from the clicked one rather than scrolling a line.
+
 ## [0.5.0] - 2026-09-25
 
 ### Added
