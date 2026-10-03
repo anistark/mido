@@ -2,10 +2,22 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
+pub const BANNER: &str = concat!(
+    "                      ██
+            ██        ██
+████████          ██████    ████
+██  ██  ██  ██  ██    ██  ██    ██
+██  ██  ██  ██  ██    ██  ██    ██
+██  ██  ██  ██    ██████    ████  v",
+    env!("CARGO_PKG_VERSION")
+);
+
 #[derive(Parser, Debug)]
 #[command(
     name = "mido",
     version,
+    disable_version_flag = true,
+    before_help = BANNER,
     about = "Markdown In, Document Out. A terminal Markdown reader."
 )]
 pub struct Cli {
@@ -35,4 +47,8 @@ pub struct Cli {
     /// Print the man page as roff to stdout
     #[arg(long)]
     pub man: bool,
+
+    /// Print version
+    #[arg(short = 'V', long)]
+    pub version: bool,
 }

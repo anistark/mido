@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use clap::Parser;
 use mido::app::keys::Keymap;
 use mido::app::{App, Settings, Source};
-use mido::cli::Cli;
+use mido::cli::{BANNER, Cli};
 use mido::config::{self, Config};
 use mido::markdown::parse;
 use mido::project::Project;
@@ -17,6 +17,10 @@ const MAN_PAGE: &str = include_str!(concat!(env!("OUT_DIR"), "/mido.1"));
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    if cli.version {
+        println!("{BANNER}");
+        return Ok(());
+    }
     if cli.man {
         io::stdout().lock().write_all(MAN_PAGE.as_bytes())?;
         return Ok(());
