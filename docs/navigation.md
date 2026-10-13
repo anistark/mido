@@ -24,7 +24,7 @@ Everything that moves you around a document or a folder: links, history, the fil
 | Any other file | Opens with the system opener |
 | A web URL | Opens in your browser |
 
-Links show their URL dimmed after the text, so you can see where they go before following them.
+Links show their URL dimmed after the text, so you can see where they go before following them. The selected link's target is also shown in the status bar, which helps with wikilinks and links whose URL is hidden, like a badge.
 
 ## History
 

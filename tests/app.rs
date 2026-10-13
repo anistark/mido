@@ -757,7 +757,7 @@ fn ascii_glyphs_draw_nothing_outside_ascii() {
     let mut app = App::with_settings(Source::Stdin, &text, settings);
     let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
     let view = screen(&mut app, &mut terminal);
-    for symbol in ["│", "─", "╭", "•", "▸", "▾", "▎", "…", "☐"] {
+    for symbol in ["│", "─", "╭", "•", "▸", "▾", "▎", "…", "○"] {
         assert!(!view.contains(symbol), "{symbol} in\n{view}");
     }
     insta::assert_snapshot!("ascii", view);
@@ -790,4 +790,25 @@ fn gutter_and_front_matter_follow_the_settings() {
         !screen(&mut app, &mut terminal).contains("title"),
         "m returns to hidden"
     );
+}
+
+#[test]
+fn the_status_bar_names_where_the_selected_link_goes() {
+    let mut app = App::new(
+        Source::Stdin,
+        "Read [the guide](https://example.com/guide) or [[Notes]].\n",
+        None,
+    );
+    let mut terminal = Terminal::new(TestBackend::new(80, 10)).unwrap();
+    screen(&mut app, &mut terminal);
+    press(&mut app, KeyCode::Char(']'));
+    let status = screen(&mut app, &mut terminal);
+    let status = status.lines().last().unwrap();
+    assert!(status.contains("▸ https://example.com/guide"), "{status}");
+    press(&mut app, KeyCode::Char(']'));
+    let status = screen(&mut app, &mut terminal);
+    assert!(status.lines().last().unwrap().contains("[[Notes]]"));
+    press(&mut app, KeyCode::Esc);
+    let status = screen(&mut app, &mut terminal);
+    assert!(!status.lines().last().unwrap().contains("Notes"));
 }

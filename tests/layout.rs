@@ -63,7 +63,7 @@ fn rich_content_links_and_front_matter() {
     assert_eq!(name.style, Theme::dark().label());
     assert!(plain.contains("● Note") && plain.contains("▲ Warning"));
     assert!(plain.contains("🎉") && plain.contains("$e = mc^2$"));
-    assert!(plain.contains("▣ A tiny square (images/tiny.png)"));
+    assert!(plain.contains("■ A tiny square (images/tiny.png)"));
 
     let expanded = layout_with(
         &doc,

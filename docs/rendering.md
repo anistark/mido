@@ -24,7 +24,7 @@ mido parses CommonMark plus the GitHub extensions and draws every element with i
 - Paragraphs wrap at the measure, with one blank line between blocks.
 - *Emphasis*, **strong** and ~~strikethrough~~ use the terminal's italic, bold and crossed-out attributes, and fall back to color where an attribute is missing.
 - `Inline code` sits on a tinted background with a space of padding each side.
-- Links are underlined, with the URL shown dim after the text. Wikilinks like `[[Page]]` are underlined without a URL.
+- Links are underlined, with the URL shown dim after the text. Wikilinks like `[[Page]]` are underlined without a URL. In print mode links are OSC 8 hyperlinks as well.
 - Emoji shortcodes such as `:tada:` become the emoji, using GitHub's shortcode table.
 - Math in `$..$` is shown as styled source, delimiters included, so nothing is guessed.
 - Footnote markers are superscript digits, and the definitions collect after a rule at the end of the document. Select a marker with `]` and press `Enter` to read the note in a popup.
@@ -32,7 +32,7 @@ mido parses CommonMark plus the GitHub extensions and draws every element with i
 
 ## Lists
 
-Nested lists use `•`, `◦` and `▪` by depth, with the markers colored by depth. Ordered lists keep the numbers from the source. Task lists draw `☐` and `☑`, with done items muted.
+Nested lists use `•`, `◦` and `▪` by depth, with the markers colored by depth. Ordered lists keep the numbers from the source. Task lists draw `○` for an open task and `✓` for a done one, with done items muted.
 
 ## Blockquotes and alerts
 
@@ -56,6 +56,15 @@ An image on its own line is drawn in the terminal. mido queries the terminal for
 Local files resolve relative to the document. Remote images are off by default. Start mido with `--remote-images` to fetch them, capped at 10 MB each and cached in the user cache directory.
 
 Images inside a sentence, images that fail to load and every image in print mode show as a placeholder with the alt text and path.
+
+Terminals checked so far, with the protocol mido picked:
+
+| Terminal | Protocol | Notes |
+| --- | --- | --- |
+| Ghostty 1.3 on macOS | Kitty | The real picture |
+| Apple Terminal 2.15 on macOS | Half blocks | No graphics protocol, so the picture is drawn in colored blocks |
+
+Kitty, iTerm2, WezTerm, Alacritty, Windows Terminal, VS Code's terminal, tmux and SSH have not been checked yet. To check one, open a file with a picture and press `i` twice: the notice says which protocol mido found.
 
 ## Badges
 

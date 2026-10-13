@@ -130,7 +130,7 @@ Internal planning notes go in `plan/`, which is gitignored along with `.claude/`
 
 The design is part of the product. `docs/rendering.md` says what each element looks like and is the reference for a user, and `src/render/theme.rs` says what color it takes.
 
-- Every element has a treatment: H1 is a filled title chip, H2 a text-width underline, inline code sits padded on the code background, links show their URL dimmed, front matter and badges are two-tone label chips, an image alone in a paragraph becomes a picture and an inline one becomes `▣ alt (path)`.
+- Every element has a treatment: H1 is a filled title chip, H2 a text-width underline, inline code sits padded on the code background, links show their URL dimmed, front matter and badges are two-tone label chips, an image alone in a paragraph becomes a picture and an inline one becomes `■ alt (path)`.
 - Wrapping is in-house. `wrap()` takes `Piece`s: text pieces break at spaces, atomic pieces never break, and adjacent atomic pieces form one unbreakable word, which is how a two-part chip stays together. Trailing spaces are trimmed unless they carry a background.
 - Layout owns the measure. Full terminal width by default, `--width` caps and centers, two columns of gutter each side from 60 wide. Exactly one blank line between blocks, two before H1 and H2.
 - Color tiers: truecolor when `COLORTERM` says so, else 256, else 16. `NO_COLOR` gives mono, and every element has a text-only form there: backticks for code, a heavy rule under H1, `[key: value]` for chips.

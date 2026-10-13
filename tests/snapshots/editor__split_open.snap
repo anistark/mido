@@ -9,7 +9,7 @@ expression: screen
 " Things to buy:                                  │ Things to buy:                                   "
 "                                                 │                                                  "
 " - apples                                        │ • apples                                         "
-" - [ ] bread                                     │ ☐ bread                                          "
+" - [ ] bread                                     │ ○ bread                                          "
 "                                                 │                                                  "
 " > keep it short                                 │ ▎ keep it short                                  "
 "                                                 │                                                  "

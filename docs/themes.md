@@ -77,7 +77,7 @@ Colors are written in truecolor. On a terminal without truecolor mido maps each 
 
 | Tier | What it uses |
 | --- | --- |
-| `unicode` | The default. Box drawing, bullets `•` `◦` `▪`, bars `▎`, task boxes `☐` `☑`, fold markers `▾` `▸`, the image marker `▣`, superscript footnote numbers |
+| `unicode` | The default. Box drawing, bullets `•` `◦` `▪`, bars `▎`, task marks `○` `✓`, fold markers `▾` `▸`, the image marker `■`, superscript footnote numbers |
 | `ascii` | Plain ASCII only: tables and frames from `+` and `-`, `-` `*` `+` bullets, `[ ]` and `[x]` tasks, `>` and `v` markers, `[1]` footnotes, and Mermaid diagrams drawn in ASCII. For fonts without box drawing, serial consoles and logs |
 | `nerd` | The Unicode set plus Nerd Font icons: folder and Markdown file icons in the files panel, an image icon, and GitHub-style icons on alerts. Needs a patched [Nerd Font](https://www.nerdfonts.com) |
 
@@ -89,12 +89,15 @@ The terminal owns the font, so mido cannot pick one. What it can do is stay insi
 | --- | --- | --- | --- |
 | Menlo | Every glyph | No | The macOS Terminal default, complete coverage |
 | MesloLGS NF | Every glyph | Every icon | Menlo with Nerd Font icons, the best fit for `glyphs = "nerd"` |
-| JetBrains Mono | All but `▣` `☐` `☑` `✦` | No | The image marker, task boxes and the TIP icon come from the fallback font. Its Nerd Font build adds the icons |
-| SF Mono | All but `▣` `▪` `◆` `☐` `☑` `✦`, and `△` `►` `◄` `◉` in some diagrams | No | Works, with a few more fallback glyphs |
-| Source Code Pro | All but `▣` `▪` `▸` `▾` `●` `◦` `✦`, and `►` `◄` in diagrams | No | Fold markers and bullets come from the fallback font. Checked as the Powerline Awesome build |
+| JetBrains Mono | Every glyph | No | Its Nerd Font build adds the icons |
+| Monaspace | Every glyph | No | All five families: Neon, Argon, Xenon, Radon and Krypton |
+| Cascadia Code | Every glyph | No | Its Nerd Font build, Cascadia Code NF, adds the icons |
+| Fira Code | All but `▸` `▾` `◦`, and `△` in some diagrams | No | Fold markers and second-level bullets come from the fallback font |
+| SF Mono | All but `▪` `◆`, and `△` `►` `◄` `◉` in some diagrams | No | Third-level bullets and the IMPORTANT icon come from the fallback font |
+| Source Code Pro | All but `▪` `▸` `▾` `○` `●` `◦`, and `►` `◄` in diagrams | No | Fold markers, bullets and open tasks come from the fallback font. Checked as the Powerline Awesome build |
 | Monaco, Courier New, Andale Mono | Many missing, including rounded corners and heavy rules | No | Old fonts without the newer box drawing. Use `glyphs = "ascii"` |
 
-Fira Code, Iosevka, Monaspace and Cascadia Code have not been checked yet. Reports for them, or for any other font, are welcome.
+Iosevka has not been checked yet. Reports for it, or for any other font, are welcome.
 
 ## Built-in themes
 

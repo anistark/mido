@@ -65,6 +65,8 @@ Local images render without any flag. Remote ones, `http` and `https` URLs, are 
 mido -p README.md | less -R
 ```
 
+Links in print mode are OSC 8 hyperlinks, so terminals that support them make the text clickable: web links open in the browser and relative links to files that exist open as `file://` URLs. Anchors, wikilinks and footnotes stay plain text, and the plain output below has no hyperlinks.
+
 Piping or redirecting without `-p` writes plain text with no escape codes, so this never leaks colors into a file:
 
 ```sh

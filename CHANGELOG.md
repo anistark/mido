@@ -18,9 +18,13 @@ All notable changes to mido are recorded here. The format follows [Keep a Change
 - The editor and the preview scroll together through the source map, whichever was scrolled last leading, down to a line inside a long paragraph or a code block. `s` turns sync off and on, `<` and `>` resize the split, and a click in the preview puts the cursor on that line.
 - `split = "side-by-side"` or `"stacked"` and `split_ratio` in the config. On a narrow terminal the files panel gives way to the split first.
 - Quitting with `Ctrl-c` while the editor has unsaved changes asks first.
+- Print mode writes links as OSC 8 hyperlinks, so terminals that support them make the text clickable. Relative links to files that exist become `file://` URLs.
+- The status bar names where the selected link goes.
+- `docs/rendering.md` records the image protocol mido picks in the terminals checked so far: Kitty in Ghostty, half blocks in Apple Terminal.
 
 ### Changed
 
+- Task marks are `○` and `✓`, the image marker is `■` and the TIP icon is `◊` in the `unicode` tier, so JetBrains Mono, Monaspace and Cascadia Code draw every glyph without a fallback font. The fonts table now covers Fira Code, Monaspace and Cascadia Code.
 - mido-core: `Inline::SoftBreak` and `Inline::HardBreak` carry the byte offset of the source line they start, `BlockKind::CodeBlock` has the offset of each code line, and wrapped lines carry a source offset through `Piece::Source`, so `Layout::sources` maps lines inside a paragraph or a code block.
 - mido-core: syntax highlighting results are cached by language, code and theme, so laying a document out again does not highlight unchanged code blocks twice.
 

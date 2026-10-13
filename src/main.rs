@@ -10,8 +10,9 @@ use mido::config::{self, Config};
 use mido::markdown::parse;
 use mido::project::Project;
 use mido::render::ansi;
-use mido::render::layout::{Options, layout_with};
+use mido::render::layout::{Link, Options, layout_with};
 use mido::render::theme::{ColorMode, Theme};
+use mido::render::wrap::LinkKind;
 
 const MAN_PAGE: &str = include_str!(concat!(env!("OUT_DIR"), "/mido.1"));
 
@@ -109,7 +110,21 @@ fn main() -> Result<()> {
         };
         let width = config.width.unwrap_or_else(print_width).max(20);
         let out = layout_with(&doc, &theme, width, &options);
-        return ansi::write(&out.lines, &mut io::stdout().lock(), color).map_err(Into::into);
+        let base = match &source {
+            Source::File(path) => path.parent().map(Path::to_path_buf),
+            Source::Project { project, file } => file
+                .as_ref()
+                .and_then(|f| project.absolute(f).parent().map(Path::to_path_buf)),
+            Source::Stdin => None,
+        };
+        return ansi::write(
+            &out.lines,
+            &out.links,
+            &mut io::stdout().lock(),
+            color,
+            |link| hyperlink(link, base.as_deref()),
+        )
+        .map_err(Into::into);
     }
 
     let keymap = Keymap::with_overrides(&config.keys).map_err(|e| {
@@ -170,6 +185,26 @@ fn source(cli: &Cli, config: &Config) -> Result<Source> {
             Ok(source)
         }
     }
+}
+
+/// The URL a terminal should open for a link: web and mail links as they are, a relative
+/// path that exists as a `file://` URL, and nothing for anchors, wikilinks and footnotes.
+fn hyperlink(link: &Link, base: Option<&Path>) -> Option<String> {
+    if link.kind != LinkKind::Url || link.url.starts_with('#') {
+        return None;
+    }
+    if link.url.contains("://") || link.url.starts_with("mailto:") {
+        return Some(link.url.clone());
+    }
+    let path = link.url.split('#').next().unwrap_or_default();
+    let target = base?.join(path).canonicalize().ok()?;
+    Some(format!(
+        "file://{}",
+        target
+            .to_string_lossy()
+            .replace('\\', "/")
+            .replace(' ', "%20")
+    ))
 }
 
 fn is_markdown(path: Option<&Path>, config: &Config) -> bool {

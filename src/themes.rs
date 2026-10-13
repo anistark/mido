@@ -67,5 +67,5 @@ pub fn list(config: &Config, mode: ColorMode, out: &mut impl Write) -> io::Resul
     if let Some(dir) = &config.themes_dir {
         lines.push(Line::raw(format!(" User themes go in {}", dir.display())));
     }
-    ansi::write(&lines, out, mode != ColorMode::Mono)
+    ansi::write(&lines, &[], out, mode != ColorMode::Mono, |_| None)
 }

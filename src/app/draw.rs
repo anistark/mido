@@ -15,7 +15,7 @@ use super::{App, Focus, Mode, Panel};
 use crate::markdown::Document;
 use crate::render::layout::{footnote_label, layout};
 use crate::render::theme::ColorMode;
-use crate::render::wrap::{Piece, width, wrap};
+use crate::render::wrap::{LinkKind, Piece, width, wrap};
 
 const MIN_CONTENT_AUTO: u16 = 60;
 const MIN_CONTENT_FORCED: u16 = 40;
@@ -246,6 +246,7 @@ impl App {
     }
 
     fn draw_edit_status(&mut self, buf: &mut Buffer, area: Rect) {
+        let target = self.link_target().filter(|_| self.focus == Focus::Content);
         let Some(session) = &mut self.edit else {
             return;
         };
@@ -258,6 +259,8 @@ impl App {
         let find = &session.find;
         let middle = if let Some(notice) = &self.notice {
             notice.clone()
+        } else if let Some(target) = target {
+            target
         } else if self.focus == Focus::Content {
             format!(
                 "preview: {} sync {}  {}/{} resize  {} edit  Esc done",
@@ -805,6 +808,20 @@ impl App {
         }
     }
 
+    /// Where the selected link goes, for the status bar.
+    fn link_target(&self) -> Option<String> {
+        let link = self.layout.links.get(self.link?)?;
+        Some(match link.kind {
+            LinkKind::Url => format!("{} {}", self.theme.glyphs.collapsed.trim_end(), link.url),
+            LinkKind::Wiki => format!(
+                "{} [[{}]]",
+                self.theme.glyphs.collapsed.trim_end(),
+                link.url
+            ),
+            LinkKind::Footnote => format!("footnote [^{}]", link.url),
+        })
+    }
+
     fn draw_status(&self, buf: &mut Buffer, area: Rect) {
         let style = self.theme.status();
         buf.set_style(area, style);
@@ -826,6 +843,8 @@ impl App {
         };
         let middle = if let Some(notice) = &self.notice {
             notice.clone()
+        } else if let Some(target) = self.link_target() {
+            target
         } else if !self.query.is_empty() && self.mode != Mode::Search {
             let n = self.current.map(|i| i + 1).unwrap_or(0);
             format!("/{}  {}/{}", self.query, n, self.matches.len())
