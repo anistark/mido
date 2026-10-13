@@ -174,7 +174,7 @@ fn sole_image(content: &[Inline]) -> Option<(&[Inline], &str)> {
             Inline::Image { alt, url } if found.is_none() => {
                 found = Some((alt.as_slice(), url.as_str()))
             }
-            Inline::SoftBreak | Inline::HardBreak => {}
+            Inline::SoftBreak(_) | Inline::HardBreak(_) => {}
             Inline::Text(s) if s.trim().is_empty() => {}
             _ => return None,
         }
@@ -209,7 +209,7 @@ fn sole_display_math(content: &[Inline]) -> Option<&str> {
                 display: true,
                 source,
             } if found.is_none() => found = Some(source.as_str()),
-            Inline::SoftBreak | Inline::HardBreak => {}
+            Inline::SoftBreak(_) | Inline::HardBreak(_) => {}
             Inline::Text(s) if s.trim().is_empty() => {}
             _ => return None,
         }
@@ -242,6 +242,9 @@ impl Renderer<'_> {
     }
 
     fn emit_line(&mut self, line: Wrapped) {
+        if line.source.is_some() {
+            self.source = line.source;
+        }
         self.emit_with(line.spans, line.links);
     }
 
@@ -304,7 +307,11 @@ impl Renderer<'_> {
         match &block.kind {
             BlockKind::Heading { level, content } => self.heading(*level, content),
             BlockKind::Paragraph(content) => self.paragraph(content),
-            BlockKind::CodeBlock { lang, code } => self.code_block(lang.as_deref(), code),
+            BlockKind::CodeBlock {
+                lang,
+                code,
+                line_starts,
+            } => self.code_block(lang.as_deref(), code, line_starts),
             BlockKind::BlockQuote { alert, blocks } => self.quote(*alert, blocks),
             BlockKind::List(list) => self.list(list),
             BlockKind::DefinitionList(defs) => self.definitions(defs),
@@ -347,7 +354,7 @@ impl Renderer<'_> {
                     Span::styled(self.theme.glyphs.expanded, accent),
                     Span::styled("front matter", self.theme.muted()),
                 ]);
-                self.code_block(Some(meta.language()), &meta.text);
+                self.code_block(Some(meta.language()), &meta.text, &[]);
             }
         }
         self.blank();
@@ -634,13 +641,19 @@ impl Renderer<'_> {
                 Inline::Html(s) => {
                     out.push(Piece::text(s.clone(), self.theme.faint()).with_link(link))
                 }
-                Inline::SoftBreak => out.push(Piece::text(" ", style).with_link(link)),
-                Inline::HardBreak => out.push(Piece::Break),
+                Inline::SoftBreak(at) => {
+                    out.push(Piece::text(" ", style).with_link(link));
+                    out.push(Piece::Source(*at));
+                }
+                Inline::HardBreak(at) => {
+                    out.push(Piece::Break);
+                    out.push(Piece::Source(*at));
+                }
             }
         }
     }
 
-    fn code_block(&mut self, lang: Option<&str>, code: &str) {
+    fn code_block(&mut self, lang: Option<&str>, code: &str, line_starts: &[usize]) {
         let code = code.replace('\t', "    ");
         let inner = self.avail().saturating_sub(2).max(1);
         if lang == Some("mermaid")
@@ -666,6 +679,9 @@ impl Renderer<'_> {
             lines.push(Vec::new());
         }
         for (i, mut spans) in lines.into_iter().enumerate() {
+            if let Some(&at) = line_starts.get(i) {
+                self.source = Some(at);
+            }
             for span in spans.iter_mut() {
                 span.style = span.style.bg(self.theme.code_bg);
             }
@@ -1085,7 +1101,7 @@ fn pieces_width(pieces: &[Piece]) -> usize {
         .iter()
         .map(|p| match p {
             Piece::Text { text, .. } => width(text),
-            Piece::Break => 0,
+            Piece::Break | Piece::Source(_) => 0,
         })
         .sum()
 }
@@ -1098,7 +1114,7 @@ fn pieces_min_width(pieces: &[Piece]) -> usize {
                 text, atomic: true, ..
             } => width(text),
             Piece::Text { text, .. } => text.split(' ').map(width).max().unwrap_or(0),
-            Piece::Break => 0,
+            Piece::Break | Piece::Source(_) => 0,
         })
         .max()
         .unwrap_or(0)

@@ -31,6 +31,10 @@ pub enum Action {
     PrevMatch,
     Edit,
     Editor,
+    Split,
+    Sync,
+    SplitNarrower,
+    SplitWider,
     Help,
     Quit,
     Save,
@@ -44,6 +48,7 @@ pub enum Action {
     FindNext,
     FindPrev,
     ToggleTask,
+    Preview,
 }
 
 impl Action {
@@ -63,6 +68,7 @@ impl Action {
                 | Action::FindNext
                 | Action::FindPrev
                 | Action::ToggleTask
+                | Action::Preview
         )
     }
 }
@@ -160,6 +166,30 @@ pub const ACTIONS: &[(Action, &str, &[&str], &str)] = &[
         &["e"],
         "Edit the file in mido's own editor",
     ),
+    (
+        Action::Split,
+        "split",
+        &["v"],
+        "Edit with a live preview, or close the preview",
+    ),
+    (
+        Action::Sync,
+        "sync",
+        &["s"],
+        "In the split, scroll the editor and preview together or apart",
+    ),
+    (
+        Action::SplitNarrower,
+        "split_narrower",
+        &["<"],
+        "In the split, give the editor less room",
+    ),
+    (
+        Action::SplitWider,
+        "split_wider",
+        &[">"],
+        "In the split, give the editor more room",
+    ),
     (Action::Help, "help", &["?", "h"], "Key help"),
     (Action::Quit, "quit", &["q"], "Quit"),
     (Action::Save, "save", &["ctrl-s"], "Save the file"),
@@ -192,6 +222,12 @@ pub const ACTIONS: &[(Action, &str, &[&str], &str)] = &[
         "toggle_task",
         &["ctrl-t"],
         "Check or uncheck a task, or make the line one",
+    ),
+    (
+        Action::Preview,
+        "preview",
+        &["ctrl-e"],
+        "Show or hide the live preview beside the editor",
     ),
 ];
 
@@ -288,6 +324,14 @@ const SECTIONS: &[(&str, &[Row])] = &[
                 "Next / previous match",
             ),
             Row::One(Action::Editor, "Edit the file in mido"),
+            Row::One(Action::Split, "Edit with a live preview"),
+            Row::One(Action::Sync, "In the split, sync scrolling on or off"),
+            Row::Pair(
+                Action::SplitNarrower,
+                Action::SplitWider,
+                "",
+                "In the split, editor narrower / wider",
+            ),
             Row::One(Action::Edit, "Edit the file in $EDITOR, reload on return"),
         ],
     ),
@@ -303,7 +347,7 @@ const SECTIONS: &[(&str, &[Row])] = &[
         &[
             Row::One(Action::Save, "Save"),
             Row::Fixed("`F1`", "This help"),
-            Row::Fixed("`Esc`", "Back to reading, asks about unsaved work"),
+            Row::Fixed("`Esc`", "Back to reading, or to the preview"),
             Row::Pair(Action::Undo, Action::Redo, "", "Undo / redo"),
             Row::Pair(Action::Cut, Action::Copy, "", "Cut / copy the selection"),
             Row::One(Action::Paste, "Paste"),
@@ -316,6 +360,7 @@ const SECTIONS: &[(&str, &[Row])] = &[
                 "Next / previous match",
             ),
             Row::One(Action::ToggleTask, "Check a task, or make the line one"),
+            Row::One(Action::Preview, "Show or hide the live preview"),
             Row::Fixed("`Shift` with a move", "Select, and so does a drag"),
             Row::Fixed("`Ctrl-←` / `Ctrl-→`", "Word left / right, or Alt-b / Alt-f"),
             Row::Fixed("`Ctrl-↑` / `Ctrl-↓`", "Paragraph up / down"),

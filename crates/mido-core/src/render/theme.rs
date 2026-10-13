@@ -14,7 +14,7 @@ pub const SCHEMA: u32 = 1;
 pub const DEFAULT_DARK: &str = "mido-dark";
 pub const DEFAULT_LIGHT: &str = "mido-light";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ColorMode {
     TrueColor,
     Indexed,

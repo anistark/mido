@@ -44,7 +44,11 @@ source text, while editing
   -> source     pulldown-cmark offsets -> styled runs    core/render/source.rs
   -> paint      the backend draws, mido colors the cells src/edit/textarea.rs
   -> save       encode with the file's layout, atomic    src/edit/file.rs
+  -> preview    Preview::SetContent after a 40 ms pause, src/app/preview.rs
+                parse here, layout on a worker thread
 ```
+
+In the split the preview is the same reader on the same `Layout`, fed by `Preview` commands, and the two panes line up through `Layout::sources` and the preview's `line_starts`.
 
 `Document` is the important decision. The outline, search, link following, history, print mode and the snapshot tests all walk it, and a block never loses its source range, which is how a resize keeps the reading position.
 
@@ -65,6 +69,7 @@ source text, while editing
 | `src/render/ansi.rs` | Print mode, in the binary because it writes crossterm escapes |
 | `src/app/mod.rs` | App state and event loop: navigation, history, link selection, relayout. `Settings` carries what the config decides into `App::with_settings` |
 | `src/app/draw.rs` | Panels, cards, status bar, overlays, image slots, the editor pane and its prompts |
+| `src/app/preview.rs` | The `Preview` commands and their one handler, the debounced hand-off of the editor's text, the layout worker thread, the split's areas, and scroll sync both ways |
 | `src/app/editing.rs` | The edit session: entering and leaving, keys to commands, find, save and the overwrite check, prompts, paste, the mouse, and the panic guard that writes a recovery file |
 | `src/edit/mod.rs` | The `Editor` trait, `Command`, `Motion` and the `Look` an editor paints with |
 | `src/edit/textarea.rs` | The ratatui-textarea backend: undo steps, painting over the widget, the screen map for the mouse and scroll |
@@ -84,6 +89,7 @@ source text, while editing
 - **mido-core stays terminal-free.** No crossterm, ratatui, notify or ureq in `crates/mido-core`. If a module needs them it belongs in the binary.
 - **Print mode and the viewer paint the same lines.** A change to `layout.rs` is done for both at once. Only chrome, pictures and overlays live in `draw.rs`.
 - **One keymap.** `src/app/keys.rs` drives the view dispatch, panel and overlay movement, the status bar hints, the help overlay and `docs/keys.md`, and a test fails when the page drifts. Only `Esc`, `Tab`, `Ctrl-c` and the panel fold keys are fixed. The key table in the README is kept by hand. Editor actions (`Action::in_editor`) are looked up apart from the reader's with `Keymap::edit_action`, must not be a plain letter, and in the editor `Ctrl-c` copies instead of quitting. Movement and the Markdown keys in the editor are fixed rows in the help.
+- **The preview is driven only through `Preview`.** Opening, replacing the content, scrolling to a source line and reloading go through `App::preview`. The built-in editor is its first client, and a control socket for other editors is meant to send the same commands, so there is no second rendering path.
 - **The app talks to an editor only through `Editor` and `Command`.** Nothing outside `src/edit/textarea.rs` touches ratatui-textarea, and assists return commands instead of editing, so another backend gets them for free.
 - **Saving never loses bytes.** An unedited buffer saves byte for byte, `tests/edit.rs` checks it over every Markdown file in the repo, and a save goes through a temporary file and a rename. The buffer is never replaced while editing: a change on disk is noted and the next save asks.
 - **Nothing reaches the network without `--remote-images`.** It is a flag only, never a config setting, because a `.mido.toml` arrives with any folder a user opens. Local images always load. Remote images and badge values are fetched only with the flag: images cached under the user cache directory with a 10 MB cap, badges with a 5 s timeout and a 64 KB cap and no disk cache.
@@ -196,4 +202,7 @@ Both release recipes require `main` and a clean tree.
 - **The editor draws twice over.** The textarea widget lays out glyphs, wraps and scrolls with every style of its own set blank, then `TextAreaEditor::render` walks the painted rows through `screen_to_data` and sets each cell's style: theme, syntax runs, cursor line, selection, find hits. The real terminal cursor is placed with `Frame::set_cursor_position`, so screen snapshots do not show it, and tests read it from the backend.
 - **Undo steps are text hashes.** ratatui-textarea undoes one edit at a time, so a step records the hash of the lines before and after, and undo replays the textarea's history until the hash matches. A run of typing or erasing folds into one step, an assist runs inside `Editor::group`, and any edit, even one that changes nothing, clears the redo stack because it cuts the textarea's redo branch.
 - **ratatui-textarea copies on some deletes.** `delete_str` and the word deletes write the deleted text to its yank buffer, and `delete_str` past the end of the text leaves a one-line chunk that panics a later paste in debug builds. The backend restores the yank around them and skips a paste with nothing to paste.
-- **Typing latency is a budget.** About 6.5 ms of a keystroke on a 5k-line file is the textarea rebuilding its wrap map. Measure before adding per-keystroke work, and keep anything whole-document behind the editor's version counter.
+- **Typing latency is a budget.** A keystroke on a 5k-line file takes about 9 ms in a release build, 6.5 ms of it the textarea rebuilding its wrap map. A preview refresh adds about 2 ms of parsing on the main thread and 1 ms to install the worker's layout. Measure before adding per-keystroke work, and keep anything whole-document behind the editor's version counter.
+- **The source map is finer than blocks.** A soft or hard break carries the offset of the source line it starts, the wrapper hands it on as a zero-width `Piece::Source`, and the wrapped line that holds the next word records it. Code lines carry their own offsets. Lines without one inherit the last, so `Layout::sources` only grows within a block, but footnotes at the end point back to where they were defined.
+- **The live preview lays out off the main thread.** `App::receive_layout` installs the worker's result only if nothing newer replaced it, and any direct change through `set_text` drops the pending one. Tests call `App::flush_preview`, which lays out in place, because they have no event loop to wait in.
+- **Where `Esc` goes in the editor depends on the last frame.** With the preview on screen it moves to the preview, otherwise it leaves the editor. Screen tests must draw after `v` before pressing keys, as the event loop does.

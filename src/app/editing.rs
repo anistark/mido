@@ -12,7 +12,6 @@ use super::watch::FileWatcher;
 use super::{App, Focus, Mode};
 use crate::edit::file::{self, EditFile, Eol};
 use crate::edit::{self, Command, Editor, Look, Motion, assist};
-use crate::markdown::parse;
 use crate::render::source::{Run, SourceHighlighter};
 use crate::render::theme::{ColorMode, Theme};
 
@@ -24,6 +23,8 @@ pub(super) enum Prompt {
     /// Saving over a file that changed on disk since it was opened. `leave` closes the
     /// editor after the save.
     Overwrite { leave: bool },
+    /// Quitting mido with unsaved changes.
+    Quit,
 }
 
 #[derive(Debug, Default)]
@@ -259,12 +260,14 @@ impl App {
             self.reload();
             self.notice = Some("changes discarded".to_string());
         } else {
-            self.doc = parse(&session.editor.text());
+            self.set_text(&session.editor.text());
             self.layout_width = 0;
         }
         self.pending_source = Some(offset);
         self.mode = Mode::View;
         self.focus = Focus::Content;
+        self.split = false;
+        self.preview_area = None;
     }
 
     pub(super) fn leave_editor(&mut self) {
@@ -349,6 +352,13 @@ impl App {
             (Prompt::Leave, 'd' | 'n') => self.close_editor(true),
             (Prompt::Overwrite { leave }, 'o' | 'y') => self.save(true, leave),
             (Prompt::Overwrite { .. }, 'r') => self.revert(),
+            (Prompt::Quit, 's' | 'y') => {
+                self.save(false, false);
+                if self.edit.as_mut().is_some_and(|s| !s.dirty()) && self.mode == Mode::View {
+                    self.quit = true;
+                }
+            }
+            (Prompt::Quit, 'd' | 'n') => self.quit = true,
             (_, 'c') => self.mode = Mode::View,
             _ => {}
         }
@@ -365,6 +375,10 @@ impl App {
             Prompt::Overwrite { .. } => (
                 format!("{name} changed on disk since it was opened."),
                 format!("o overwrite {dot} r reload from disk {dot} Esc cancel"),
+            ),
+            Prompt::Quit => (
+                format!("{name} has unsaved changes."),
+                format!("s save and quit {dot} d quit without saving {dot} Esc cancel"),
             ),
         }
     }
@@ -386,6 +400,7 @@ impl App {
         if session.find.typing {
             return self.key_find(key);
         }
+        self.driver = Focus::Editor;
         if let Some(action) = self.keymap.edit_action(&key) {
             return self.edit_action(action);
         }
@@ -402,6 +417,8 @@ impl App {
                 session.editor.run(Command::Deselect);
             } else if !session.find.query.is_empty() {
                 session.find = Find::default();
+            } else if self.preview_area.is_some() {
+                self.focus = Focus::Content;
             } else {
                 self.leave_editor();
             }
@@ -493,6 +510,7 @@ impl App {
                 let commands = assist::toggle_task(editor.lines(), editor.cursor());
                 editor.group(commands);
             }
+            Action::Preview => self.toggle_split(),
             _ => {}
         }
     }
@@ -619,13 +637,20 @@ impl App {
         };
         let at = session.editor.position_at(mouse.column, mouse.row);
         match mouse.kind {
-            MouseEventKind::ScrollDown => session.editor.run(Command::Scroll(3)),
-            MouseEventKind::ScrollUp => session.editor.run(Command::Scroll(-3)),
+            MouseEventKind::ScrollDown => {
+                session.editor.run(Command::Scroll(3));
+                self.driver = Focus::Editor;
+            }
+            MouseEventKind::ScrollUp => {
+                session.editor.run(Command::Scroll(-3));
+                self.driver = Focus::Editor;
+            }
             MouseEventKind::Down(MouseButton::Left) => {
                 let Some((row, col)) = at else { return false };
                 session.anchor = Some((row, col));
                 session.editor.run(Command::Jump(row, col));
                 self.focus = Focus::Editor;
+                self.driver = Focus::Editor;
             }
             MouseEventKind::Drag(MouseButton::Left) => {
                 let (Some(anchor), Some(to)) = (session.anchor, at) else {

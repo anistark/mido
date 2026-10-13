@@ -40,6 +40,7 @@ enum Node {
     CodeBlock {
         lang: Option<String>,
         code: String,
+        line_starts: Vec<usize>,
     },
     BlockQuote {
         alert: Option<Alert>,
@@ -131,7 +132,7 @@ impl Builder {
         match event {
             Event::Start(tag) => self.start(tag, range.start),
             Event::End(_) => self.end_frame(range.end),
-            Event::Text(s) => self.text(&s),
+            Event::Text(s) => self.text(&s, range.start),
             Event::Code(s) => self.inline(Inline::Code(s.into_string())),
             Event::InlineMath(s) => self.inline(Inline::Math {
                 display: false,
@@ -144,8 +145,8 @@ impl Builder {
             Event::Html(s) => self.html(&s),
             Event::InlineHtml(s) => self.inline(Inline::Html(s.into_string())),
             Event::FootnoteReference(s) => self.inline(Inline::FootnoteRef(s.into_string())),
-            Event::SoftBreak => self.inline(Inline::SoftBreak),
-            Event::HardBreak => self.inline(Inline::HardBreak),
+            Event::SoftBreak => self.inline(Inline::SoftBreak(range.end)),
+            Event::HardBreak => self.inline(Inline::HardBreak(range.end)),
             Event::Rule => self.block(BlockKind::Rule, range),
             Event::TaskListMarker(checked) => {
                 for frame in self.stack.iter_mut().rev() {
@@ -193,6 +194,7 @@ impl Builder {
                 Node::CodeBlock {
                     lang,
                     code: String::new(),
+                    line_starts: Vec::new(),
                 }
             }
             Tag::HtmlBlock => {
@@ -283,11 +285,22 @@ impl Builder {
             Node::Heading { level, content } => {
                 self.block(BlockKind::Heading { level, content }, span)
             }
-            Node::CodeBlock { lang, mut code } => {
+            Node::CodeBlock {
+                lang,
+                mut code,
+                line_starts,
+            } => {
                 if code.ends_with('\n') {
                     code.pop();
                 }
-                self.block(BlockKind::CodeBlock { lang, code }, span);
+                self.block(
+                    BlockKind::CodeBlock {
+                        lang,
+                        code,
+                        line_starts,
+                    },
+                    span,
+                );
             }
             Node::BlockQuote { alert, blocks } => {
                 self.block(BlockKind::BlockQuote { alert, blocks }, span)
@@ -380,9 +393,22 @@ impl Builder {
         }
     }
 
-    fn text(&mut self, s: &str) {
+    fn text(&mut self, s: &str, at: usize) {
         match self.top() {
-            Some(Node::CodeBlock { code, .. }) => code.push_str(s),
+            Some(Node::CodeBlock {
+                code, line_starts, ..
+            }) => {
+                for (i, line) in s.split_inclusive('\n').scan(0, |pos, line| {
+                    let start = *pos;
+                    *pos += line.len();
+                    Some((start, line))
+                }) {
+                    if code.is_empty() || code.ends_with('\n') {
+                        line_starts.push(at + i);
+                    }
+                    code.push_str(line);
+                }
+            }
             Some(Node::Html(html)) => html.push_str(s),
             Some(Node::Meta { text, .. }) => text.push_str(s),
             _ => self.inline(Inline::Text(emojify(s))),
@@ -623,7 +649,8 @@ mod tests {
             doc.blocks[0].kind,
             BlockKind::CodeBlock {
                 lang: Some("rust".into()),
-                code: "fn main() {}".into()
+                code: "fn main() {}".into(),
+                line_starts: vec![15],
             }
         );
         let doc = parse("    indented\n");
@@ -631,7 +658,8 @@ mod tests {
             doc.blocks[0].kind,
             BlockKind::CodeBlock {
                 lang: None,
-                code: "indented".into()
+                code: "indented".into(),
+                line_starts: vec![4],
             }
         );
     }

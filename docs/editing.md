@@ -1,20 +1,30 @@
 ---
 layout: layouts/page.njk
 title: Editing
-description: The built-in editor, its keys, the Markdown it helps with, saving, and new files.
+description: The built-in editor, the live preview beside it, its keys, the Markdown it helps with, saving, and new files.
 tags: docs
 order: 6
 ---
 
 # Editing
 
-mido has an editor of its own for fixing a typo or writing a note without leaving the reader. `e` swaps the rendered page for its Markdown source, at the part you were reading, and `Esc` swaps back. `E` still opens the file in `$VISUAL` or `$EDITOR` for anything bigger.
+mido has an editor of its own for fixing a typo or writing a note without leaving the reader. `e` swaps the rendered page for its Markdown source, at the part you were reading, and `Esc` swaps back. `v` opens the source beside a live preview of the page instead. `E` still opens the file in `$VISUAL` or `$EDITOR` for anything bigger.
 
 ## Opening and leaving
 
 `e` opens the current file. The source scrolls to where the page was, and the cursor sits on the first line in view. The status bar shows the file name, `[+]` once there are unsaved changes, and the line and column of the cursor.
 
 `Esc` goes back to reading, and the page shows what you wrote. With unsaved changes it asks first: `s` saves and leaves, `d` throws the changes away and leaves, and `Esc` keeps editing. Standard input has no file to save to, so it cannot be edited.
+
+## Live preview
+
+`v` in the reader opens the editor with the rendered page beside it, and `Ctrl-e` in the editor shows or hides the preview. The preview takes the text as you type, once you pause for a moment, and lays it out in the background, so a long document never holds up typing.
+
+The two sides scroll together. Whichever you scrolled last leads: move through the source and the preview follows, scroll the preview and the source follows. They line up by the source line at the top, down to the line inside a long paragraph or a code block. A click in the preview puts the cursor on the line under it.
+
+`Esc` in the editor moves to the preview, where the reader's keys work: `j` and `k` scroll, `s` turns sync off and on, `<` and `>` give the editor less or more room, `e` or a click goes back to the editor, and `v` closes the preview. `Esc` or `q` in the preview leaves the editor, asking first about unsaved changes. Following a link from the preview to another file waits until the changes are saved.
+
+The preview sits to the right of the editor, or below it with `split = "stacked"` in the [config](configuration.md). `split_ratio` sets the editor's starting share. On a narrow terminal the files panel steps aside first to make room, and when the two panes still do not fit the editor shows alone.
 
 ## Keys
 
@@ -23,12 +33,13 @@ The editor works like most editors outside a terminal: what you type goes in, th
 | Key | Action |
 | --- | --- |
 | `Ctrl-s` | Save |
-| `Esc` | Back to reading, asking first about unsaved changes |
+| `Esc` | Back to reading, asking first about unsaved changes, or to the preview when it is open |
 | `Ctrl-z` / `Ctrl-y` | Undo / redo |
 | `Ctrl-x` / `Ctrl-c` / `Ctrl-v` | Cut / copy / paste |
 | `Ctrl-a` | Select everything |
 | `Ctrl-f`, then `Ctrl-n` / `Ctrl-p` | Find, then the next / previous match |
 | `Ctrl-t` | Check or uncheck a task, or make the line one |
+| `Ctrl-e` | Show or hide the live preview |
 | `Ctrl-←` / `Ctrl-→`, `Alt-b` / `Alt-f` | Word left / right |
 | `Ctrl-↑` / `Ctrl-↓` | Paragraph up / down |
 | `Home` / `End`, `Ctrl-Home` / `Ctrl-End` | Line start / end, top / bottom |

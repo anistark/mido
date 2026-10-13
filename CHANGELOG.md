@@ -14,6 +14,15 @@ All notable changes to mido are recorded here. The format follows [Keep a Change
 - Copying in the editor also puts the text on the system clipboard through OSC 52, and a terminal paste arrives as one paste.
 - A panic while editing writes unsaved changes to a hidden `.<name>.mido-recover` file beside the original and prints its path.
 - Editor keys in `[keys]`: `save`, `undo`, `redo`, `cut`, `copy`, `paste`, `select_all`, `find`, `find_next`, `find_prev` and `toggle_task`, looked up apart from the reader's keys, and `editor` for `e`.
+- A live preview beside the editor. `v` opens the editor with the rendered page next to it, and `Ctrl-e` in the editor shows or hides it. The preview takes the text when typing pauses and lays it out on a background thread, so a long document never holds up a keystroke.
+- The editor and the preview scroll together through the source map, whichever was scrolled last leading, down to a line inside a long paragraph or a code block. `s` turns sync off and on, `<` and `>` resize the split, and a click in the preview puts the cursor on that line.
+- `split = "side-by-side"` or `"stacked"` and `split_ratio` in the config. On a narrow terminal the files panel gives way to the split first.
+- Quitting with `Ctrl-c` while the editor has unsaved changes asks first.
+
+### Changed
+
+- mido-core: `Inline::SoftBreak` and `Inline::HardBreak` carry the byte offset of the source line they start, `BlockKind::CodeBlock` has the offset of each code line, and wrapped lines carry a source offset through `Piece::Source`, so `Layout::sources` maps lines inside a paragraph or a code block.
+- mido-core: syntax highlighting results are cached by language, code and theme, so laying a document out again does not highlight unchanged code blocks twice.
 
 ## [0.5.1] - 2026-10-01
 

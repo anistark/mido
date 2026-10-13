@@ -25,6 +25,9 @@ pub enum Piece {
         link: Option<LinkRef>,
     },
     Break,
+    /// Takes no room. Marks where a source line starts, so the wrapped line that holds the
+    /// next word knows its place in the source.
+    Source(usize),
 }
 
 impl Piece {
@@ -78,6 +81,8 @@ impl Piece {
 pub struct Wrapped {
     pub spans: Vec<Span<'static>>,
     pub links: Vec<LinkSpan>,
+    /// The first source offset marked on this line.
+    pub source: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,12 +105,18 @@ pub fn wrap(pieces: &[Piece], width: usize) -> Vec<Wrapped> {
         cur_links: Vec::new(),
         cur_width: 0,
         word: Vec::new(),
+        mark: None,
+        cur_source: None,
     };
     for piece in pieces {
         match piece {
             Piece::Break => {
                 w.end_word();
                 w.flush();
+            }
+            Piece::Source(at) => {
+                w.end_word();
+                w.mark = Some(*at);
             }
             Piece::Text {
                 text,
@@ -160,6 +171,8 @@ struct Wrapper {
     cur_links: Vec<LinkSpan>,
     cur_width: usize,
     word: Vec<(String, Style, Option<LinkRef>)>,
+    mark: Option<usize>,
+    cur_source: Option<usize>,
 }
 
 impl Wrapper {
@@ -192,6 +205,7 @@ impl Wrapper {
         self.lines.push(Wrapped {
             spans: merged,
             links,
+            source: self.cur_source.take(),
         });
         self.cur_width = 0;
     }
@@ -231,6 +245,9 @@ impl Wrapper {
         let total: usize = word.iter().map(|(t, _, _)| width(t)).sum();
         if self.cur_width > 0 && self.cur_width + total > self.width {
             self.flush();
+        }
+        if let Some(at) = self.mark.take() {
+            self.cur_source.get_or_insert(at);
         }
         if total <= self.width {
             for (text, style, link) in &word {

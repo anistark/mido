@@ -275,3 +275,271 @@ fn f1_shows_the_keys_inside_the_editor() {
     f.typing("z");
     assert!(f.screen().contains("z# Groceries"));
 }
+
+fn sections(count: usize) -> String {
+    (1..=count)
+        .map(|i| format!("## Section {i}\n\nBody of section {i}.\n\n"))
+        .collect()
+}
+
+fn split_fixture(text: &str, cols: u16, rows: u16) -> Fixture {
+    let mut f = Fixture::new(Some(text));
+    f.terminal = Terminal::new(TestBackend::new(cols, rows)).unwrap();
+    f.key(KeyCode::Char('v'));
+    f.screen();
+    f
+}
+
+/// The editor's and the preview's rows, split at the divider.
+fn panes(screen: &str) -> (Vec<String>, Vec<String>) {
+    let rows: Vec<Vec<char>> = screen
+        .lines()
+        .map(|l| l.trim_matches('"').chars().collect())
+        .collect();
+    let divider = (0..rows[2].len())
+        .find(|&x| {
+            rows[2..rows.len() - 3]
+                .iter()
+                .all(|r| r.get(x) == Some(&'│'))
+        })
+        .expect("a divider");
+    let body = &rows[..rows.len() - 1];
+    let left = body.iter().map(|r| r[..divider].iter().collect()).collect();
+    let right = body
+        .iter()
+        .map(|r| r[divider + 1..].iter().collect())
+        .collect();
+    (left, right)
+}
+
+/// The number of the first section either pane shows.
+fn first_section(rows: &[String]) -> Option<usize> {
+    rows.iter().find_map(|row| {
+        let at = row.find("ection ")? + 7;
+        let digits: String = row[at..].chars().take_while(char::is_ascii_digit).collect();
+        digits.parse().ok()
+    })
+}
+
+#[test]
+fn v_opens_the_editor_beside_a_live_preview() {
+    let mut f = split_fixture(NOTE, 100, 16);
+    assert!(f.app.editing() && f.app.splitting());
+    let screen = f.screen();
+    insta::assert_snapshot!("split_open", screen);
+    let (left, right) = panes(&screen);
+    assert!(left.iter().any(|r| r.contains("# Groceries")));
+    assert!(
+        right
+            .iter()
+            .any(|r| r.contains("Groceries") && !r.contains('#'))
+    );
+    f.key(KeyCode::End);
+    f.typing(" list");
+    f.app.flush_preview();
+    let (_, right) = panes(&f.screen());
+    assert!(
+        right.iter().any(|r| r.contains("Groceries list")),
+        "{right:#?}"
+    );
+}
+
+#[test]
+fn the_preview_follows_the_editor_through_the_source_map() {
+    let mut f = split_fixture(&sections(40), 100, 20);
+    for target in ["Section 12", "section 25", "Section 33", "section 3."] {
+        f.ctrl('f');
+        f.typing(target);
+        f.key(KeyCode::Enter);
+        let (left, right) = panes(&f.screen());
+        assert_eq!(
+            first_section(&left),
+            first_section(&right),
+            "after finding {target}:\n{left:#?}\n{right:#?}"
+        );
+    }
+}
+
+#[test]
+fn the_editor_follows_the_preview_and_s_unlinks_them() {
+    let mut f = split_fixture(&sections(40), 100, 20);
+    f.key(KeyCode::Esc);
+    assert!(f.status().contains("preview: s sync on"), "{}", f.status());
+    for _ in 0..30 {
+        f.key(KeyCode::Char('j'));
+    }
+    let (left, right) = panes(&f.screen());
+    let shown = first_section(&right);
+    assert!(shown > Some(3), "{right:#?}");
+    assert_eq!(first_section(&left), shown, "{left:#?}\n{right:#?}");
+    f.key(KeyCode::Char('s'));
+    for _ in 0..30 {
+        f.key(KeyCode::Char('j'));
+    }
+    let (left, right) = panes(&f.screen());
+    assert_eq!(first_section(&left), shown, "the editor stays put");
+    assert!(first_section(&right) > shown);
+}
+
+#[test]
+fn sync_holds_inside_a_long_paragraph() {
+    let mut text = String::from("# Long\n\n");
+    for i in 1..=60 {
+        text.push_str(&format!(
+            "Line {i} of one long paragraph, wrapped by hand.\n"
+        ));
+    }
+    let mut f = split_fixture(&text, 100, 20);
+    f.ctrl('f');
+    f.typing("Line 40 ");
+    f.key(KeyCode::Enter);
+    let (left, right) = panes(&f.screen());
+    let top = |rows: &[String]| {
+        rows.iter().find_map(|row| {
+            let at = row.find("Line ")? + 5;
+            row[at..]
+                .chars()
+                .take_while(char::is_ascii_digit)
+                .collect::<String>()
+                .parse::<usize>()
+                .ok()
+        })
+    };
+    let (editor, preview) = (top(&left).unwrap(), top(&right).unwrap());
+    assert!(editor > 20, "{left:#?}");
+    assert!(
+        preview.abs_diff(editor) <= 1,
+        "editor at line {editor}, preview at {preview}:\n{right:#?}"
+    );
+}
+
+#[test]
+fn clicking_the_preview_moves_the_cursor_there() {
+    let mut f = split_fixture(&sections(10), 100, 24);
+    let screen = f.screen();
+    let (_, right) = panes(&screen);
+    let row = right
+        .iter()
+        .position(|r| r.contains("Body of section 3."))
+        .unwrap();
+    let column = screen.lines().nth(row).unwrap().find("Body").unwrap() as u16;
+    f.app.mouse_event(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column,
+        row: row as u16,
+        modifiers: KeyModifiers::NONE,
+    });
+    assert!(f.status().contains("Ln 11, Col 1"), "{}", f.status());
+}
+
+#[test]
+fn angle_brackets_move_the_divider_and_ctrl_e_hides_the_preview() {
+    let mut f = split_fixture(NOTE, 100, 16);
+    let at = |screen: &str| {
+        screen
+            .lines()
+            .nth(4)
+            .unwrap()
+            .trim_matches('"')
+            .chars()
+            .position(|c| c == '│')
+    };
+    let before = at(&f.screen()).unwrap();
+    f.key(KeyCode::Esc);
+    f.key(KeyCode::Char('>'));
+    f.key(KeyCode::Char('>'));
+    let wider = at(&f.screen()).unwrap();
+    assert!(wider > before, "{before} then {wider}");
+    f.key(KeyCode::Char('e'));
+    f.ctrl('e');
+    assert!(!f.app.splitting());
+    assert_eq!(at(&f.screen()), None);
+    f.ctrl('e');
+    assert!(f.app.splitting());
+}
+
+#[test]
+fn the_files_panel_gives_way_to_the_split() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("README.md"), NOTE).unwrap();
+    fs::write(dir.path().join("other.md"), "# Other\n").unwrap();
+    let project = mido::project::Project::scan(dir.path());
+    let file = project.entry_file();
+    let mut app = App::with_settings(Source::Project { project, file }, NOTE, Settings::default());
+    let mut terminal = Terminal::new(TestBackend::new(82, 16)).unwrap();
+    let mut screen = |app: &mut App| {
+        terminal.draw(|frame| app.draw(frame)).unwrap();
+        terminal.backend().to_string()
+    };
+    app.press(KeyCode::Char('e'));
+    assert!(
+        screen(&mut app).contains("other.md"),
+        "the sidebar fits beside the editor"
+    );
+    app.press(KeyCode::Esc);
+    app.press(KeyCode::Char('v'));
+    screen(&mut app);
+    let split = screen(&mut app);
+    assert!(
+        !split.contains("other.md"),
+        "the sidebar goes first:\n{split}"
+    );
+    assert!(app.splitting());
+}
+
+#[test]
+fn stacked_puts_the_preview_below() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("note.md");
+    fs::write(&path, NOTE).unwrap();
+    let settings = Settings {
+        split: mido::config::Split::Stacked,
+        ..Settings::default()
+    };
+    let mut app = App::with_settings(Source::File(path), NOTE, settings);
+    let mut terminal = Terminal::new(TestBackend::new(60, 30)).unwrap();
+    app.press(KeyCode::Char('v'));
+    terminal.draw(|frame| app.draw(frame)).unwrap();
+    let screen = terminal.backend().to_string();
+    let rows: Vec<&str> = screen.lines().collect();
+    let divider = rows.iter().position(|r| r.contains("──────────")).unwrap();
+    assert!(rows[..divider].iter().any(|r| r.contains("# Groceries")));
+    assert!(
+        rows[divider..]
+            .iter()
+            .any(|r| r.contains("Groceries") && !r.contains('#'))
+    );
+}
+
+#[test]
+fn quitting_with_unsaved_changes_asks_first() {
+    let mut f = split_fixture(NOTE, 100, 16);
+    f.typing("x");
+    f.key(KeyCode::Esc);
+    f.ctrl('c');
+    assert!(f.screen().contains("s save and quit"));
+    f.key(KeyCode::Esc);
+    assert!(f.app.editing());
+    f.key(KeyCode::Char('q'));
+    assert!(f.screen().contains("Unsaved changes"));
+}
+
+#[test]
+fn links_in_the_preview_do_not_leave_unsaved_work() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("note.md");
+    fs::write(&path, "See [other](other.md).\n").unwrap();
+    fs::write(dir.path().join("other.md"), "# Other\n").unwrap();
+    let text = fs::read_to_string(&path).unwrap();
+    let mut app = App::with_settings(Source::File(path.clone()), &text, Settings::default());
+    let mut terminal = Terminal::new(TestBackend::new(100, 16)).unwrap();
+    app.press(KeyCode::Char('v'));
+    terminal.draw(|frame| app.draw(frame)).unwrap();
+    app.press(KeyCode::Char('!'));
+    app.press(KeyCode::Esc);
+    terminal.draw(|frame| app.draw(frame)).unwrap();
+    app.press(KeyCode::Char(']'));
+    app.press(KeyCode::Enter);
+    assert_eq!(app.current_file(), Some(path.as_path()));
+    assert!(app.notice().is_some_and(|n| n.contains("unsaved changes")));
+}

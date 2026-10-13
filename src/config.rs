@@ -25,6 +25,17 @@ pub enum Background {
     Light,
 }
 
+/// How the editor and its live preview share the screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Split {
+    #[default]
+    SideBySide,
+    Stacked,
+}
+
+pub const DEFAULT_SPLIT_RATIO: u16 = 50;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum FrontMatterSetting {
@@ -45,6 +56,8 @@ struct File {
     gutter: Option<u16>,
     front_matter: Option<FrontMatterSetting>,
     extensions: Option<Vec<String>>,
+    split: Option<Split>,
+    split_ratio: Option<u16>,
     #[serde(default)]
     keys: BTreeMap<String, Keys>,
 }
@@ -83,6 +96,8 @@ pub struct Config {
     pub gutter: u16,
     pub front_matter: FrontMatterView,
     pub extensions: Vec<String>,
+    pub split: Split,
+    pub split_ratio: u16,
     pub keys: BTreeMap<String, Vec<String>>,
     pub files: Vec<PathBuf>,
     pub themes_dir: Option<PathBuf>,
@@ -100,6 +115,8 @@ impl Default for Config {
             gutter: DEFAULT_GUTTER,
             front_matter: FrontMatterView::Collapsed,
             extensions: default_extensions(),
+            split: Split::default(),
+            split_ratio: DEFAULT_SPLIT_RATIO,
             keys: BTreeMap::new(),
             files: Vec::new(),
             themes_dir: None,
@@ -193,6 +210,15 @@ impl Config {
                 bail!("gutter must be at most 16, got {gutter}");
             }
             self.gutter = gutter;
+        }
+        if let Some(split) = file.split {
+            self.split = split;
+        }
+        if let Some(ratio) = file.split_ratio {
+            if !(20..=80).contains(&ratio) {
+                bail!("split_ratio must be between 20 and 80, got {ratio}");
+            }
+            self.split_ratio = ratio;
         }
         if let Some(view) = file.front_matter {
             self.front_matter = match view {
@@ -410,6 +436,8 @@ width = 90
 gutter = 4
 front_matter = "hidden"
 extensions = [".md", "TXT"]
+split = "stacked"
+split_ratio = 60
 
 [keys]
 quit = "x"
@@ -431,6 +459,8 @@ scroll_down = ["j", "ctrl-n"]
         assert_eq!(config.gutter, 4);
         assert_eq!(config.front_matter, FrontMatterView::Hidden);
         assert_eq!(config.extensions, ["md", "txt"]);
+        assert_eq!(config.split, Split::Stacked);
+        assert_eq!(config.split_ratio, 60);
         assert_eq!(config.keys["quit"], ["x"]);
         assert_eq!(config.keys["scroll_down"], ["j", "ctrl-n"]);
     }
@@ -456,6 +486,8 @@ scroll_down = ["j", "ctrl-n"]
         assert!(err("glyphs = \"emoji\"").contains("unknown variant `emoji`"));
         assert!(err("width = 5").contains("at least 20"));
         assert!(err("extensions = []").contains("at least one"));
+        assert!(err("split_ratio = 90").contains("between 20 and 80"));
+        assert!(err("split = \"sideways\"").contains("unknown variant"));
     }
 
     #[test]

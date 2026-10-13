@@ -129,6 +129,8 @@ fn main() -> Result<()> {
         keymap,
         front_matter: config.front_matter,
         extensions: config.extensions.clone(),
+        split: config.split,
+        split_ratio: config.split_ratio,
     };
     let mut app = App::with_settings(source, &text, settings);
     app.set_remote_images(cli.remote_images);

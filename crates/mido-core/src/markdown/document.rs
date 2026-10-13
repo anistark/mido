@@ -200,6 +200,8 @@ pub enum BlockKind {
     CodeBlock {
         lang: Option<String>,
         code: String,
+        /// Byte offset in the source where each line of `code` starts.
+        line_starts: Vec<usize>,
     },
     BlockQuote {
         alert: Option<Alert>,
@@ -299,8 +301,10 @@ pub enum Inline {
     },
     FootnoteRef(String),
     Html(String),
-    SoftBreak,
-    HardBreak,
+    /// A line break in the source, with the byte offset where the next source line starts.
+    SoftBreak(usize),
+    /// A forced line break, with the byte offset where the next source line starts.
+    HardBreak(usize),
 }
 
 pub fn plain_text(inlines: &[Inline]) -> String {
@@ -326,7 +330,7 @@ fn push_plain(inlines: &[Inline], out: &mut String) {
                 out.push_str(label);
                 out.push(']');
             }
-            Inline::SoftBreak | Inline::HardBreak => out.push(' '),
+            Inline::SoftBreak(_) | Inline::HardBreak(_) => out.push(' '),
         }
     }
 }

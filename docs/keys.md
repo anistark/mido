@@ -58,6 +58,9 @@ The tables below are generated from the keymap in the source, so they cannot dri
 | `/` | Search, Enter to keep, Esc to cancel |
 | `n` / `N` | Next / previous match |
 | `e` | Edit the file in mido |
+| `v` | Edit with a live preview |
+| `s` | In the split, sync scrolling on or off |
+| `<` / `>` | In the split, editor narrower / wider |
 | `E` | Edit the file in $EDITOR, reload on return |
 
 ## Help and quit
@@ -73,7 +76,7 @@ The tables below are generated from the keymap in the source, so they cannot dri
 | --- | --- |
 | `Ctrl-s` | Save |
 | `F1` | This help |
-| `Esc` | Back to reading, asks about unsaved work |
+| `Esc` | Back to reading, or to the preview |
 | `Ctrl-z` / `Ctrl-y` | Undo / redo |
 | `Ctrl-x` / `Ctrl-c` | Cut / copy the selection |
 | `Ctrl-v` | Paste |
@@ -81,6 +84,7 @@ The tables below are generated from the keymap in the source, so they cannot dri
 | `Ctrl-f` | Find in the file, Enter keeps, Esc cancels |
 | `Ctrl-n` / `Ctrl-p` | Next / previous match |
 | `Ctrl-t` | Check a task, or make the line one |
+| `Ctrl-e` | Show or hide the live preview |
 | `Shift` with a move | Select, and so does a drag |
 | `Ctrl-←` / `Ctrl-→` | Word left / right, or Alt-b / Alt-f |
 | `Ctrl-↑` / `Ctrl-↓` | Paragraph up / down |
@@ -135,6 +139,10 @@ The editor's actions have keys of their own, apart from the reader's, so `ctrl-f
 | `prev_match` | `N` | Previous match |
 | `edit` | `E` | Edit the file in $EDITOR |
 | `editor` | `e` | Edit the file in mido's own editor |
+| `split` | `v` | Edit with a live preview, or close the preview |
+| `sync` | `s` | In the split, scroll the editor and preview together or apart |
+| `split_narrower` | `<` | In the split, give the editor less room |
+| `split_wider` | `>` | In the split, give the editor more room |
 | `help` | `?`, `h` | Key help |
 | `quit` | `q` | Quit |
 | `save` | `Ctrl-s` | Save the file |
@@ -148,3 +156,4 @@ The editor's actions have keys of their own, apart from the reader's, so `ctrl-f
 | `find_next` | `Ctrl-n` | Next match |
 | `find_prev` | `Ctrl-p` | Previous match |
 | `toggle_task` | `Ctrl-t` | Check or uncheck a task, or make the line one |
+| `preview` | `Ctrl-e` | Show or hide the live preview beside the editor |

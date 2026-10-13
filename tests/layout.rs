@@ -305,3 +305,30 @@ fn mermaid_blocks_become_diagrams_or_fall_back() {
         "too-wide drawings fall back to source:\n{narrow_text}"
     );
 }
+
+#[test]
+fn the_source_map_reaches_inside_paragraphs_and_code() {
+    let text = "first words of a paragraph\nsecond source line\nthird one\n\n```\nalpha\nbeta\ngamma\n```\n\n- item\n  continued here\n";
+    let out = layout(&parse(text), &Theme::dark(), 14);
+    let lines = out.plain_lines();
+    let line_of = |needle: &str| lines.iter().position(|l| l.contains(needle)).unwrap();
+    let offset = |needle: &str| {
+        let at = text.find(needle).unwrap();
+        text[..at].rfind('\n').map_or(0, |i| i + 1)
+    };
+    for needle in ["second", "third", "beta", "gamma", "continued"] {
+        assert_eq!(
+            out.line_for_source(offset(needle)),
+            line_of(needle),
+            "{needle} in {lines:#?}"
+        );
+        assert_eq!(
+            out.source_at(line_of(needle)),
+            Some(offset(needle)),
+            "{needle}"
+        );
+    }
+    let wrapped = line_of("paragraph");
+    assert!(wrapped > 0, "the first source line wraps");
+    assert_eq!(out.source_at(wrapped), Some(0));
+}

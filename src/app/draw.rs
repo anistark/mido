@@ -55,10 +55,87 @@ impl App {
         {
             self.focus = Focus::Content;
         }
-        let content_width = self.content_width(content_area.width);
-        self.ensure_layout(content_width);
-        self.view_height = content_area.height as usize;
+        let buf = frame.buffer_mut();
+        if self.theme.paints_background() {
+            buf.set_style(area, self.theme.background());
+        }
+        let mut cursor = None;
+        if self.edit.is_some() {
+            let split = self.split_areas(content_area);
+            self.preview_area = split.preview;
+            if split.preview.is_none() && self.focus == Focus::Content {
+                self.focus = Focus::Editor;
+            }
+            if split.preview.is_some() {
+                self.follow_preview();
+            }
+            let editor_area = self.measure(split.editor);
+            if let Some(session) = &mut self.edit {
+                cursor = session.render(editor_area, buf, &self.theme);
+            }
+            if let Some(preview) = split.preview {
+                self.follow_editor();
+                self.draw_document(buf, preview, preview);
+            }
+            if let Some(divider) = split.divider {
+                self.draw_divider(buf, divider);
+            }
+        } else {
+            self.preview_area = None;
+            let scrollbar = Rect {
+                x: body.x,
+                width: body.width,
+                ..content_area
+            };
+            self.draw_document(buf, content_area, scrollbar);
+        }
+
+        if let Some(panel) = files_area {
+            self.draw_files(buf, panel);
+        }
+        if let Some(panel) = outline_area {
+            self.draw_outline(buf, panel);
+        }
+        if self.edit.is_some() {
+            self.draw_edit_status(buf, status_area);
+        } else {
+            self.draw_status(buf, status_area);
+        }
+        match self.mode {
+            Mode::Help => self.draw_help(buf, body),
+            Mode::Toc => self.draw_toc(buf, area),
+            Mode::Finder => self.draw_finder(buf, area),
+            Mode::Footnote => self.draw_footnote(buf, area),
+            Mode::Prompt(prompt) => self.draw_prompt(buf, area, prompt),
+            _ => {}
+        }
+        cursor
+    }
+
+    /// The column of text inside a pane: gutters on both sides, capped by `width` and centered.
+    fn measure(&self, pane: Rect) -> Rect {
+        let width = self.content_width(pane.width) as u16;
+        let (left, right) = gutters(pane.width, self.gutter);
+        let available = pane.width.saturating_sub(left + right);
+        Rect {
+            x: pane.x + left + available.saturating_sub(width) / 2,
+            width: width.min(pane.width),
+            ..pane
+        }
+    }
+
+    /// Draws the rendered document in `area`, the reader's page or the editor's preview, with
+    /// its scrollbar at the right edge of `scrollbar`.
+    fn draw_document(&mut self, buf: &mut Buffer, area: Rect, scrollbar: Rect) {
+        let text = self.measure(area);
+        let content_width = text.width as usize;
+        let x = text.x;
+        self.ensure_layout(self.content_width(area.width));
+        self.view_height = area.height as usize;
         self.clamp_scroll();
+        if let Some(offset) = self.pending_source.take() {
+            self.scroll = self.layout.line_for_source(offset).min(self.max_scroll());
+        }
         if let Some(anchor) = self.pending_anchor.take() {
             match self.layout.line_for_anchor(&anchor) {
                 Some(line) => self.scroll = line.min(self.max_scroll()),
@@ -69,42 +146,15 @@ impl App {
             let row = self.active_heading().and_then(|h| self.outline.row_for(h));
             self.outline.list.select(row);
         }
-
-        let (left, right) = gutters(content_area.width, self.gutter);
-        let available = (content_area.width - left - right) as usize;
-        let x = content_area.x + left + ((available - content_width) / 2) as u16;
-        self.content_origin = (x, content_area.y);
+        self.content_origin = (x, area.y);
         self.content_cols = content_width as u16;
-        let buf = frame.buffer_mut();
-        if self.theme.paints_background() {
-            buf.set_style(area, self.theme.background());
-        }
-        if let Some(session) = &mut self.edit {
-            let editor_area = Rect {
-                x,
-                width: content_width as u16,
-                ..content_area
-            };
-            let cursor = session.render(editor_area, buf, &self.theme);
-            if let Some(panel) = files_area {
-                self.draw_files(buf, panel);
-            }
-            self.draw_edit_status(buf, status_area);
-            if let Mode::Prompt(prompt) = self.mode {
-                self.draw_prompt(buf, area, prompt);
-            }
-            if self.mode == Mode::Help {
-                self.draw_help(buf, body);
-            }
-            return cursor;
-        }
         if self.layout.lines.is_empty() {
             let notice = if self.project.is_some() && self.file.is_none() {
                 "No Markdown files here yet."
             } else {
                 "Nothing to show, the file is empty."
             };
-            buf.set_stringn(x, content_area.y, notice, content_width, self.theme.faint());
+            buf.set_stringn(x, area.y, notice, content_width, self.theme.faint());
         }
         for (row, line) in self
             .layout
@@ -114,7 +164,7 @@ impl App {
             .take(self.view_height)
             .enumerate()
         {
-            let y = content_area.y + row as u16;
+            let y = area.y + row as u16;
             buf.set_line(x, y, line, content_width as u16);
             if line.width() > content_width {
                 buf[(x + content_width as u16 - 1, y)]
@@ -122,18 +172,17 @@ impl App {
                     .set_style(self.theme.faint());
             }
         }
-        self.draw_images(buf, x, content_area.y, content_width as u16);
-        self.draw_matches(buf, x, content_area.y, content_width as u16);
+        self.draw_images(buf, x, area.y, content_width as u16);
+        self.draw_matches(buf, x, area.y, content_width as u16);
         if let Some(link) = self.link.and_then(|i| self.layout.links.get(i))
             && link.line >= self.scroll
             && link.line < self.scroll + self.view_height
         {
-            let row = content_area.y + (link.line - self.scroll) as u16;
+            let row = area.y + (link.line - self.scroll) as u16;
             for col in link.start..link.end.min(content_width as u16) {
                 buf[(x + col, row)].set_style(self.theme.status_chip());
             }
         }
-
         if self.layout.lines.len() > self.view_height {
             let mut state = ScrollbarState::new(self.max_scroll() + 1)
                 .position(self.scroll)
@@ -147,31 +196,27 @@ impl App {
                 .thumb_style(self.theme.faint())
                 .render(
                     Rect {
-                        x: body.x,
-                        width: body.width,
-                        ..content_area
+                        x: scrollbar.x,
+                        width: scrollbar.width,
+                        ..area
                     },
                     buf,
                     &mut state,
                 );
         }
+    }
 
-        if let Some(panel) = files_area {
-            self.draw_files(buf, panel);
+    fn draw_divider(&self, buf: &mut Buffer, divider: Rect) {
+        let (symbol, style) = if divider.width == 1 {
+            (self.theme.glyphs.edge, self.theme.table_border())
+        } else {
+            (self.theme.glyphs.rule, self.theme.table_border())
+        };
+        for y in divider.top()..divider.bottom() {
+            for x in divider.left()..divider.right() {
+                buf[(x, y)].set_symbol(symbol).set_style(style);
+            }
         }
-        if let Some(panel) = outline_area {
-            self.draw_outline(buf, panel);
-        }
-        self.draw_status(buf, status_area);
-        match self.mode {
-            Mode::Help => self.draw_help(buf, body),
-            Mode::Toc => self.draw_toc(buf, area),
-            Mode::Finder => self.draw_finder(buf, area),
-            Mode::Footnote => self.draw_footnote(buf, area),
-            Mode::Prompt(prompt) => self.draw_prompt(buf, area, prompt),
-            _ => {}
-        }
-        None
     }
 
     fn draw_prompt(&mut self, buf: &mut Buffer, area: Rect, prompt: Prompt) {
@@ -184,6 +229,7 @@ impl App {
         let title = match prompt {
             Prompt::Leave => " Unsaved changes ",
             Prompt::Overwrite { .. } => " Changed on disk ",
+            Prompt::Quit => " Unsaved changes ",
         };
         let block = self.popup_block(title);
         let inner = block.inner(popup);
@@ -212,6 +258,15 @@ impl App {
         let find = &session.find;
         let middle = if let Some(notice) = &self.notice {
             notice.clone()
+        } else if self.focus == Focus::Content {
+            format!(
+                "preview: {} sync {}  {}/{} resize  {} edit  Esc done",
+                self.keymap.first(Action::Sync),
+                if self.sync { "on" } else { "off" },
+                self.keymap.first(Action::SplitNarrower),
+                self.keymap.first(Action::SplitWider),
+                self.keymap.first(Action::Editor),
+            )
         } else if find.typing || !find.query.is_empty() {
             let cursor = if find.typing {
                 self.theme.glyphs.cursor
@@ -226,8 +281,13 @@ impl App {
             };
             format!("find: {}{cursor}{count}", find.query)
         } else {
+            let esc = if self.preview_area.is_some() {
+                "preview"
+            } else {
+                "done"
+            };
             format!(
-                "{} save  Esc done  F1 keys",
+                "{} save  Esc {esc}  F1 keys",
                 self.keymap.first(Action::Save)
             )
         };
@@ -405,6 +465,7 @@ impl App {
         let mut files = None;
         let mut outline = None;
         let editing = self.edit.is_some();
+        let split_room = self.split_min_width();
         if body.height >= 7 && !self.focus_mode {
             let (wanted, forced) = match self.show_files {
                 Some(v) => (v, true),
@@ -414,7 +475,8 @@ impl App {
                 MIN_CONTENT_FORCED
             } else {
                 MIN_CONTENT_AUTO
-            };
+            }
+            .max(split_room);
             let w = (body.width / 4).clamp(22, 32);
             if wanted && (right - left).saturating_sub(w) >= min {
                 files = Some(Rect {

@@ -39,7 +39,7 @@ mido docs               # read the bundled documentation offline
 mido new notes.md       # start a new file in the editor
 ```
 
-Press `e` to edit the file in place: the Markdown source, colored with the theme, with lists that continue on `Enter`, tasks that toggle with `Ctrl-t`, and `Ctrl-s` to save. `Esc` goes back to reading.
+Press `e` to edit the file in place: the Markdown source, colored with the theme, with lists that continue on `Enter`, tasks that toggle with `Ctrl-t`, and `Ctrl-s` to save. `Esc` goes back to reading. `v` puts a live preview beside the source, scrolling along with it.
 
 The full documentation is at [anistark.github.io/mido](https://anistark.github.io/mido).
 
@@ -66,6 +66,7 @@ Piping without `-p` prints plain text, so `mido file.md > out.txt` never leaks e
 | `H` / `L` | Back / forward through visited pages |
 | `Ctrl-p` | Find a file in the folder |
 | `e` | Edit the file in mido, `Ctrl-s` saves, `Esc` returns |
+| `v` | Edit with a live preview beside the source |
 | `E` | Edit the file in `$EDITOR`, reload on return |
 | `/` then `n` / `N` | Search, next, previous |
 | `t` | Table of contents |

@@ -4,6 +4,7 @@ mod finder;
 mod images;
 pub mod keys;
 mod outline;
+mod preview;
 mod search;
 mod watch;
 
@@ -23,6 +24,7 @@ use ratatui::layout::{Position, Rect};
 use ratatui::widgets::ListState;
 use ratatui_image::picker::Picker;
 
+use crate::config::{DEFAULT_SPLIT_RATIO, Split};
 use crate::edit::clipboard;
 use crate::markdown::{Document, parse};
 use crate::project::{Project, default_extensions, display_path, is_markdown};
@@ -34,10 +36,12 @@ use crate::render::wrap::{LinkKind, width};
 use editing::{Prompt, Session};
 use images::Images;
 use keys::{Action, Keymap};
+pub use preview::Preview;
 use search::Match;
 use watch::FileWatcher;
 
 const TAB_CHORD: Duration = Duration::from_secs(1);
+const TICK: Duration = Duration::from_millis(100);
 
 /// Everything the config decides for the viewer.
 #[derive(Debug, Clone)]
@@ -48,6 +52,8 @@ pub struct Settings {
     pub keymap: Keymap,
     pub front_matter: FrontMatterView,
     pub extensions: Vec<String>,
+    pub split: Split,
+    pub split_ratio: u16,
 }
 
 impl Default for Settings {
@@ -59,6 +65,8 @@ impl Default for Settings {
             keymap: Keymap::default(),
             front_matter: FrontMatterView::Collapsed,
             extensions: default_extensions(),
+            split: Split::default(),
+            split_ratio: DEFAULT_SPLIT_RATIO,
         }
     }
 }
@@ -270,6 +278,18 @@ pub struct App {
     edit: Option<Session>,
     clipboard: Option<String>,
     pending_source: Option<usize>,
+    line_starts: Vec<usize>,
+    split: bool,
+    split_mode: Split,
+    split_ratio: u16,
+    sync: bool,
+    driver: Focus,
+    synced: Option<usize>,
+    preview_version: Option<u64>,
+    seen_version: Option<u64>,
+    edited_at: Instant,
+    preview_area: Option<Rect>,
+    worker: Option<preview::Worker>,
     notice: Option<String>,
     quit: bool,
 }
@@ -345,6 +365,18 @@ impl App {
             edit: None,
             clipboard: None,
             pending_source: None,
+            line_starts: preview::line_starts(text),
+            split: false,
+            split_mode: settings.split,
+            split_ratio: settings.split_ratio,
+            sync: true,
+            driver: Focus::Editor,
+            synced: None,
+            preview_version: None,
+            seen_version: None,
+            edited_at: Instant::now(),
+            preview_area: None,
+            worker: None,
             notice: None,
             quit: false,
         };
@@ -407,6 +439,8 @@ impl App {
 
     fn event_loop(&mut self, terminal: &mut DefaultTerminal) -> Result<()> {
         loop {
+            self.receive_layout();
+            let due = self.refresh_preview(false);
             terminal.draw(|frame| self.draw(frame))?;
             if let Some(text) = self.clipboard.take() {
                 execute!(
@@ -414,7 +448,12 @@ impl App {
                     crossterm::style::Print(clipboard::osc52(&text))
                 )?;
             }
-            if crossterm::event::poll(Duration::from_millis(100))? {
+            let wait = if self.awaiting_layout() {
+                Duration::from_millis(4)
+            } else {
+                due.map_or(TICK, |d| d.min(TICK))
+            };
+            if crossterm::event::poll(wait)? {
                 match crossterm::event::read()? {
                     Event::Key(key) if key.kind != KeyEventKind::Release => self.key(key),
                     Event::Mouse(mouse) => self.mouse(mouse),
@@ -633,7 +672,7 @@ impl App {
         };
         match std::fs::read_to_string(&path) {
             Ok(text) => {
-                self.doc = parse(&text);
+                self.set_text(&text);
                 self.layout_width = 0;
                 self.notice = Some("reloaded".to_string());
             }
@@ -642,9 +681,32 @@ impl App {
     }
 
     fn open_path(&mut self, path: PathBuf) -> bool {
+        let editing = self.edit.is_some();
+        if editing {
+            if self.edit.as_mut().is_some_and(Session::dirty) {
+                self.notice = Some(format!(
+                    "unsaved changes, {} saves them",
+                    self.keymap.first(Action::Save)
+                ));
+                return false;
+            }
+            self.edit = None;
+        }
+        let opened = self.load_path(path);
+        if editing && opened {
+            self.start_editing();
+            if self.split {
+                self.preview_version = None;
+                self.flush_preview();
+            }
+        }
+        opened
+    }
+
+    fn load_path(&mut self, path: PathBuf) -> bool {
         match std::fs::read_to_string(&path) {
             Ok(text) => {
-                self.doc = parse(&text);
+                self.set_text(&text);
                 self.file = Some(path.clone());
                 self.layout = Layout::default();
                 self.layout_width = 0;
@@ -909,14 +971,10 @@ impl App {
             .unwrap_or_else(|| PathBuf::from("."))
     }
 
-    fn ensure_layout(&mut self, content_width: usize) {
-        if content_width == self.layout_width {
-            return;
-        }
-        let anchor = self.layout.source_at(self.scroll);
-        let urls = image_urls(&self.doc);
+    fn layout_options(&mut self, doc: &Document) -> Options {
+        let urls = image_urls(doc);
         let base = self.base_dir();
-        let badges = self.images.badges(&badge_urls(&self.doc));
+        let badges = self.images.badges(&badge_urls(doc));
         let options = Options {
             front_matter: self.front_matter,
             images: self.images.sizes(&urls, &base),
@@ -925,7 +983,24 @@ impl App {
         if let Some(notice) = self.images.notice.take() {
             self.notice = Some(notice);
         }
-        self.layout = layout_with(&self.doc, &self.theme, content_width, &options);
+        options
+    }
+
+    fn ensure_layout(&mut self, content_width: usize) {
+        if content_width == self.layout_width {
+            return;
+        }
+        let doc = std::mem::take(&mut self.doc);
+        let options = self.layout_options(&doc);
+        let layout = layout_with(&doc, &self.theme, content_width, &options);
+        self.doc = doc;
+        self.install_layout(layout, content_width);
+    }
+
+    /// Puts a fresh layout on screen, keeping the reading position by its place in the source.
+    fn install_layout(&mut self, layout: Layout, content_width: usize) {
+        let anchor = self.layout.source_at(self.scroll);
+        self.layout = layout;
         self.layout_width = content_width;
         self.link = None;
         let tree = outline::Tree::new(&self.layout.headings);
@@ -936,7 +1011,7 @@ impl App {
             .max()
             .unwrap_or(0);
         self.outline.rebuild(tree);
-        if let Some(anchor) = self.pending_source.take().or(anchor) {
+        if let Some(anchor) = anchor {
             self.scroll = self.layout.line_for_source(anchor);
         }
         if !self.query.is_empty() {
@@ -980,7 +1055,12 @@ impl App {
         if self.files.area.is_some() {
             panes.push(Focus::Files);
         }
-        panes.push(Focus::Content);
+        if self.edit.is_some() {
+            panes.push(Focus::Editor);
+        }
+        if self.edit.is_none() || self.preview_area.is_some() {
+            panes.push(Focus::Content);
+        }
         if self.outline.area.is_some() {
             panes.push(Focus::Outline);
         }
@@ -1001,6 +1081,12 @@ impl App {
                 if self.files.list.selected().is_none() {
                     self.files.list.select(Some(0));
                 }
+            }
+            Focus::Editor | Focus::Content
+                if self.edit.is_some()
+                    && (focus == Focus::Editor || self.preview_area.is_none()) =>
+            {
+                self.focus = Focus::Editor
             }
             _ => self.focus = Focus::Content,
         }
@@ -1139,7 +1225,11 @@ impl App {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let in_editor = self.mode == Mode::View && self.focus == Focus::Editor;
         if ctrl && key.code == KeyCode::Char('c') && !in_editor {
-            self.quit = true;
+            if self.edit.as_mut().is_some_and(Session::dirty) {
+                self.mode = Mode::Prompt(Prompt::Quit);
+            } else {
+                self.quit = true;
+            }
             return;
         }
         let chord = self
@@ -1172,9 +1262,14 @@ impl App {
 
     fn key_view(&mut self, key: KeyEvent) {
         let page = self.view_height.max(1) as isize;
+        let editing = self.edit.is_some();
+        if editing {
+            self.driver = Focus::Content;
+        }
         match key.code {
             KeyCode::Esc if self.link.is_some() => return self.link = None,
             KeyCode::Esc if !self.query.is_empty() => return self.clear_search(),
+            KeyCode::Esc if editing => return self.leave_editor(),
             KeyCode::Esc => return self.quit = true,
             KeyCode::Enter if self.link.is_some() => return self.activate_link(self.link.unwrap()),
             _ => {}
@@ -1191,7 +1286,14 @@ impl App {
             return;
         };
         match action {
+            Action::Quit if editing => self.leave_editor(),
             Action::Quit => self.quit = true,
+            Action::Edit | Action::Reload if editing => {
+                self.notice = Some(format!(
+                    "{} saves, Esc leaves the editor first",
+                    self.keymap.first(Action::Save)
+                ))
+            }
             Action::NextLink => self.select_link(1),
             Action::PrevLink => self.select_link(-1),
             Action::Back => self.go_back(),
@@ -1229,6 +1331,10 @@ impl App {
             Action::Finder => self.open_finder(),
             Action::Edit => self.edit_request = true,
             Action::Editor => self.start_editing(),
+            Action::Split => self.toggle_split(),
+            Action::Sync => self.toggle_sync(),
+            Action::SplitNarrower => self.resize_split(-5),
+            Action::SplitWider => self.resize_split(5),
             Action::Reload => self.reload(),
             Action::Images => self.toggle_images(),
             Action::FrontMatter => self.toggle_front_matter(),
@@ -1456,6 +1562,9 @@ impl App {
             return;
         }
         let on_files = self.files.area.is_some_and(|r| r.contains(at));
+        if let Some(preview) = self.preview_area.filter(|r| r.contains(at)) {
+            return self.mouse_preview(mouse, preview);
+        }
         if self.editing() && !on_files && self.mouse_edit(mouse) {
             return;
         }
@@ -1528,28 +1637,21 @@ impl App {
 
 impl App {
     fn open_while_editing(&mut self, row: usize) {
-        if self.edit.as_mut().is_some_and(Session::dirty) {
-            self.notice = Some(format!(
-                "unsaved changes, {} saves them",
-                self.keymap.first(Action::Save)
-            ));
-            return;
-        }
-        let is_dir = self
-            .files
-            .rows
-            .get(row)
-            .zip(self.project.as_ref())
-            .is_some_and(|(r, p)| p.entries[r.index].is_dir);
-        if is_dir {
-            self.files.toggle(row);
-            return;
-        }
-        self.close_editor(false);
         self.files.list.select(Some(row));
-        if self.open_entry(row) {
-            self.start_editing();
+        self.open_entry(row);
+    }
+
+    fn mouse_preview(&mut self, mouse: MouseEvent, preview: Rect) {
+        match mouse.kind {
+            MouseEventKind::ScrollDown => self.scroll_by(3),
+            MouseEventKind::ScrollUp => self.scroll_by(-3),
+            MouseEventKind::Down(MouseButton::Left) => {
+                let line = self.scroll + usize::from(mouse.row - preview.y);
+                return self.click_preview(line);
+            }
+            _ => return,
         }
+        self.driver = Focus::Content;
     }
 }
 
