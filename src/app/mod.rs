@@ -1,4 +1,5 @@
 mod draw;
+mod editing;
 mod finder;
 mod images;
 pub mod keys;
@@ -13,8 +14,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use crossterm::event::{
-    DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
-    MouseButton, MouseEvent, MouseEventKind,
+    DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture, Event,
+    KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
 use crossterm::execute;
 use ratatui::DefaultTerminal;
@@ -22,6 +23,7 @@ use ratatui::layout::{Position, Rect};
 use ratatui::widgets::ListState;
 use ratatui_image::picker::Picker;
 
+use crate::edit::clipboard;
 use crate::markdown::{Document, parse};
 use crate::project::{Project, default_extensions, display_path, is_markdown};
 use crate::render::badge::badge_urls;
@@ -29,6 +31,7 @@ use crate::render::glyphs::Glyphs;
 use crate::render::layout::{FrontMatterView, Layout, Options, image_urls, layout_with};
 use crate::render::theme::Theme;
 use crate::render::wrap::{LinkKind, width};
+use editing::{Prompt, Session};
 use images::Images;
 use keys::{Action, Keymap};
 use search::Match;
@@ -102,6 +105,7 @@ enum Mode {
     Search,
     Finder,
     Footnote,
+    Prompt(Prompt),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -109,6 +113,7 @@ enum Focus {
     Files,
     Content,
     Outline,
+    Editor,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -262,6 +267,9 @@ pub struct App {
     front_matter_default: FrontMatterView,
     footnote: Option<String>,
     edit_request: bool,
+    edit: Option<Session>,
+    clipboard: Option<String>,
+    pending_source: Option<usize>,
     notice: Option<String>,
     quit: bool,
 }
@@ -334,6 +342,9 @@ impl App {
             front_matter_default: settings.front_matter,
             footnote: None,
             edit_request: false,
+            edit: None,
+            clipboard: None,
+            pending_source: None,
             notice: None,
             quit: false,
         };
@@ -362,6 +373,14 @@ impl App {
         self.key(KeyEvent::from(code));
     }
 
+    pub fn paste_text(&mut self, text: &str) {
+        self.paste(text);
+    }
+
+    pub fn notice(&self) -> Option<&str> {
+        self.notice.as_deref()
+    }
+
     pub fn mouse_event(&mut self, mouse: MouseEvent) {
         self.mouse(mouse);
     }
@@ -374,14 +393,14 @@ impl App {
         let mut terminal = ratatui::try_init()?;
         let picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
         self.set_picker(picker);
-        execute!(io::stdout(), EnableMouseCapture)?;
+        execute!(io::stdout(), EnableMouseCapture, EnableBracketedPaste)?;
         let hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
-            let _ = execute!(io::stdout(), DisableMouseCapture);
+            let _ = execute!(io::stdout(), DisableMouseCapture, DisableBracketedPaste);
             hook(info);
         }));
-        let result = self.event_loop(&mut terminal);
-        let _ = execute!(io::stdout(), DisableMouseCapture);
+        let result = self.guarded(|app| app.event_loop(&mut terminal));
+        let _ = execute!(io::stdout(), DisableMouseCapture, DisableBracketedPaste);
         ratatui::restore();
         result
     }
@@ -389,10 +408,17 @@ impl App {
     fn event_loop(&mut self, terminal: &mut DefaultTerminal) -> Result<()> {
         loop {
             terminal.draw(|frame| self.draw(frame))?;
+            if let Some(text) = self.clipboard.take() {
+                execute!(
+                    io::stdout(),
+                    crossterm::style::Print(clipboard::osc52(&text))
+                )?;
+            }
             if crossterm::event::poll(Duration::from_millis(100))? {
                 match crossterm::event::read()? {
                     Event::Key(key) if key.kind != KeyEventKind::Release => self.key(key),
                     Event::Mouse(mouse) => self.mouse(mouse),
+                    Event::Paste(text) => self.paste(&text),
                     _ => {}
                 }
             }
@@ -433,7 +459,9 @@ impl App {
             && paths
                 .iter()
                 .any(|p| !same_file(p) && is_markdown(p, &self.extensions));
-        if touches_current {
+        if touches_current && self.editing() {
+            self.disk_changed_while_editing();
+        } else if touches_current {
             self.reload();
         }
         if tree_changed {
@@ -488,14 +516,14 @@ impl App {
             return Ok(());
         };
         let args: Vec<&str> = parts.collect();
-        let _ = execute!(io::stdout(), DisableMouseCapture);
+        let _ = execute!(io::stdout(), DisableMouseCapture, DisableBracketedPaste);
         ratatui::restore();
         let status = std::process::Command::new(program)
             .args(&args)
             .arg(&path)
             .status();
         *terminal = ratatui::try_init()?;
-        execute!(io::stdout(), EnableMouseCapture)?;
+        execute!(io::stdout(), EnableMouseCapture, EnableBracketedPaste)?;
         terminal.clear()?;
         self.notice = Some(match status {
             Ok(s) if s.success() => {
@@ -908,7 +936,7 @@ impl App {
             .max()
             .unwrap_or(0);
         self.outline.rebuild(tree);
-        if let Some(anchor) = anchor {
+        if let Some(anchor) = self.pending_source.take().or(anchor) {
             self.scroll = self.layout.line_for_source(anchor);
         }
         if !self.query.is_empty() {
@@ -1109,7 +1137,8 @@ impl App {
     pub fn key(&mut self, key: KeyEvent) {
         self.notice = None;
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-        if ctrl && key.code == KeyCode::Char('c') {
+        let in_editor = self.mode == Mode::View && self.focus == Focus::Editor;
+        if ctrl && key.code == KeyCode::Char('c') && !in_editor {
             self.quit = true;
             return;
         }
@@ -1118,6 +1147,7 @@ impl App {
             .take()
             .filter(|(_, at)| at.elapsed() <= TAB_CHORD);
         match self.mode {
+            Mode::View if in_editor => self.key_edit(key),
             Mode::View if key.code == KeyCode::Tab => self.cycle_focus(1),
             Mode::View if key.code == KeyCode::BackTab => self.cycle_focus(-1),
             Mode::View if matches!(key.code, KeyCode::Left | KeyCode::Right) && chord.is_some() => {
@@ -1126,7 +1156,7 @@ impl App {
             Mode::View => match self.focus {
                 Focus::Files => self.key_files(key),
                 Focus::Outline => self.key_outline(key),
-                Focus::Content => self.key_view(key),
+                Focus::Content | Focus::Editor => self.key_view(key),
             },
             Mode::Help => self.key_help(key),
             Mode::Toc => self.key_toc(key),
@@ -1136,6 +1166,7 @@ impl App {
                 self.footnote = None;
                 self.mode = Mode::View;
             }
+            Mode::Prompt(prompt) => self.key_prompt(prompt, key),
         }
     }
 
@@ -1197,9 +1228,11 @@ impl App {
             Action::FocusMode => self.toggle_focus_mode(),
             Action::Finder => self.open_finder(),
             Action::Edit => self.edit_request = true,
+            Action::Editor => self.start_editing(),
             Action::Reload => self.reload(),
             Action::Images => self.toggle_images(),
             Action::FrontMatter => self.toggle_front_matter(),
+            _ => {}
         }
     }
 
@@ -1419,6 +1452,20 @@ impl App {
 
     fn mouse(&mut self, mouse: MouseEvent) {
         let at = Position::new(mouse.column, mouse.row);
+        if !matches!(self.mode, Mode::View) {
+            return;
+        }
+        let on_files = self.files.area.is_some_and(|r| r.contains(at));
+        if self.editing() && !on_files && self.mouse_edit(mouse) {
+            return;
+        }
+        if self.editing()
+            && on_files
+            && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
+            && let Some((row, false)) = self.files.row_at(&mouse)
+        {
+            return self.open_while_editing(row);
+        }
         if self.outline.area.is_some_and(|r| r.contains(at)) {
             match mouse.kind {
                 MouseEventKind::ScrollDown => self.outline_move(1),
@@ -1475,6 +1522,33 @@ impl App {
                 }
                 _ => {}
             }
+        }
+    }
+}
+
+impl App {
+    fn open_while_editing(&mut self, row: usize) {
+        if self.edit.as_mut().is_some_and(Session::dirty) {
+            self.notice = Some(format!(
+                "unsaved changes, {} saves them",
+                self.keymap.first(Action::Save)
+            ));
+            return;
+        }
+        let is_dir = self
+            .files
+            .rows
+            .get(row)
+            .zip(self.project.as_ref())
+            .is_some_and(|(r, p)| p.entries[r.index].is_dir);
+        if is_dir {
+            self.files.toggle(row);
+            return;
+        }
+        self.close_editor(false);
+        self.files.list.select(Some(row));
+        if self.open_entry(row) {
+            self.start_editing();
         }
     }
 }

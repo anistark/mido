@@ -10,9 +10,10 @@ order: 2
 
 ```
 mido [OPTIONS] [PATH]
+mido new <FILE>
 ```
 
-`PATH` is a Markdown file, a folder, `-` for stdin, `docs` for the bundled documentation, or `themes` to list the themes. With no path, mido opens the current folder.
+`PATH` is a Markdown file, a folder, `-` for stdin, `docs` for the bundled documentation, or `themes` to list the themes. With no path, mido opens the current folder. A Markdown file that does not exist yet opens in the [editor](editing.md) and is created on the first save, and `mido new <FILE>` does the same for any name.
 
 ## Options
 
@@ -39,6 +40,7 @@ mido -w 80 notes.md     # cap the width at 80 columns
 mido -t nord notes.md   # read in the Nord theme
 mido themes             # list the themes with a swatch of each
 mido docs               # read this documentation offline
+mido new notes.md       # start a new file in the editor
 ```
 
 ## Width

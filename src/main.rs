@@ -16,7 +16,23 @@ use mido::render::theme::{ColorMode, Theme};
 const MAN_PAGE: &str = include_str!(concat!(env!("OUT_DIR"), "/mido.1"));
 
 fn main() -> Result<()> {
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
+    let creating = cli
+        .path
+        .as_deref()
+        .is_some_and(|p| p == Path::new("new") && !p.exists());
+    if creating {
+        cli.path = Some(
+            cli.file
+                .take()
+                .context("mido new needs a file name, like mido new notes.md")?,
+        );
+    } else if let Some(file) = &cli.file {
+        bail!(
+            "unexpected argument {}, a second path only goes with new",
+            file.display()
+        );
+    }
     if cli.version {
         println!("{BANNER}");
         return Ok(());
@@ -51,7 +67,17 @@ fn main() -> Result<()> {
     }
 
     let source = source(&cli, &config)?;
-    let text = source.read().with_context(|| match &source {
+    let missing = matches!(&source, Source::File(path) if !path.exists());
+    let editing = creating || (missing && is_markdown(cli.path.as_deref(), &config));
+    if editing && (cli.print || !io::stdout().is_terminal()) {
+        bail!("the editor needs a terminal");
+    }
+    let text = if editing && missing {
+        Ok(String::new())
+    } else {
+        source.read()
+    };
+    let text = text.with_context(|| match &source {
         Source::File(path) => format!("cannot read {}", path.display()),
         Source::Project { project, file } => format!(
             "cannot read {}",
@@ -106,6 +132,9 @@ fn main() -> Result<()> {
     };
     let mut app = App::with_settings(source, &text, settings);
     app.set_remote_images(cli.remote_images);
+    if editing {
+        app.start_editing();
+    }
     app.run()
 }
 
@@ -139,6 +168,10 @@ fn source(cli: &Cli, config: &Config) -> Result<Source> {
             Ok(source)
         }
     }
+}
+
+fn is_markdown(path: Option<&Path>, config: &Config) -> bool {
+    path.is_some_and(|p| mido::project::is_markdown(p, &config.extensions))
 }
 
 fn print_width() -> usize {

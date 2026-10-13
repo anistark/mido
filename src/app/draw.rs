@@ -1,6 +1,6 @@
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
+use ratatui::layout::{Position, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{
@@ -9,6 +9,7 @@ use ratatui::widgets::{
 };
 use ratatui_image::sliced::{SignedPosition, SlicedImage};
 
+use super::editing::Prompt;
 use super::keys::{self, Action};
 use super::{App, Focus, Mode, Panel};
 use crate::markdown::Document;
@@ -21,9 +22,18 @@ const MIN_CONTENT_FORCED: u16 = 40;
 
 impl App {
     pub fn draw(&mut self, frame: &mut Frame) {
+        if let Some(cursor) = self.draw_frame(frame)
+            && self.mode == Mode::View
+            && self.focus == Focus::Editor
+        {
+            frame.set_cursor_position(cursor);
+        }
+    }
+
+    fn draw_frame(&mut self, frame: &mut Frame) -> Option<Position> {
         let area = frame.area();
         if area.height < 2 || area.width < 8 {
-            return;
+            return None;
         }
         let body = Rect {
             height: area.height - 1,
@@ -68,6 +78,25 @@ impl App {
         let buf = frame.buffer_mut();
         if self.theme.paints_background() {
             buf.set_style(area, self.theme.background());
+        }
+        if let Some(session) = &mut self.edit {
+            let editor_area = Rect {
+                x,
+                width: content_width as u16,
+                ..content_area
+            };
+            let cursor = session.render(editor_area, buf, &self.theme);
+            if let Some(panel) = files_area {
+                self.draw_files(buf, panel);
+            }
+            self.draw_edit_status(buf, status_area);
+            if let Mode::Prompt(prompt) = self.mode {
+                self.draw_prompt(buf, area, prompt);
+            }
+            if self.mode == Mode::Help {
+                self.draw_help(buf, body);
+            }
+            return cursor;
         }
         if self.layout.lines.is_empty() {
             let notice = if self.project.is_some() && self.file.is_none() {
@@ -139,8 +168,88 @@ impl App {
             Mode::Toc => self.draw_toc(buf, area),
             Mode::Finder => self.draw_finder(buf, area),
             Mode::Footnote => self.draw_footnote(buf, area),
+            Mode::Prompt(prompt) => self.draw_prompt(buf, area, prompt),
             _ => {}
         }
+        None
+    }
+
+    fn draw_prompt(&mut self, buf: &mut Buffer, area: Rect, prompt: Prompt) {
+        let (question, keys) = self.prompt_text(prompt);
+        let w = (width(&question).max(width(&keys)) as u16 + 4)
+            .max(24)
+            .min(area.width.saturating_sub(2));
+        let popup = centered(area, w, 4);
+        Clear.render(popup, buf);
+        let title = match prompt {
+            Prompt::Leave => " Unsaved changes ",
+            Prompt::Overwrite { .. } => " Changed on disk ",
+        };
+        let block = self.popup_block(title);
+        let inner = block.inner(popup);
+        block.render(popup, buf);
+        let room = inner.width.saturating_sub(1) as usize;
+        buf.set_stringn(inner.x + 1, inner.y, &question, room, self.theme.text());
+        buf.set_stringn(
+            inner.x + 1,
+            inner.y + 1,
+            &keys,
+            room,
+            Style::new().fg(self.theme.accent),
+        );
+    }
+
+    fn draw_edit_status(&mut self, buf: &mut Buffer, area: Rect) {
+        let Some(session) = &mut self.edit else {
+            return;
+        };
+        let style = self.theme.status();
+        buf.set_style(area, style);
+        let modified = if session.dirty() { " [+]" } else { "" };
+        let chip = format!(" {}{modified} ", session.name());
+        let (row, col) = session.position();
+        let position = format!("Ln {}, Col {} ", row + 1, col + 1);
+        let find = &session.find;
+        let middle = if let Some(notice) = &self.notice {
+            notice.clone()
+        } else if find.typing || !find.query.is_empty() {
+            let cursor = if find.typing {
+                self.theme.glyphs.cursor
+            } else {
+                ""
+            };
+            let count = match (find.current, find.matches.len()) {
+                (_, 0) if find.query.is_empty() => String::new(),
+                (_, 0) => "  no matches".to_string(),
+                (Some(i), n) => format!("  {}/{n}", i + 1),
+                (None, n) => format!("  {n}"),
+            };
+            format!("find: {}{cursor}{count}", find.query)
+        } else {
+            format!(
+                "{} save  Esc done  F1 keys",
+                self.keymap.first(Action::Save)
+            )
+        };
+        let right_x = area.x + area.width.saturating_sub(width(&position) as u16);
+        let chip_room = right_x.saturating_sub(area.x + 1) as usize;
+        let (after_chip, _) =
+            buf.set_stringn(area.x, area.y, &chip, chip_room, self.theme.status_chip());
+        buf.set_string(
+            right_x,
+            area.y,
+            &position,
+            style.add_modifier(Modifier::BOLD),
+        );
+        let mid_x = after_chip + 2;
+        let free = right_x.saturating_sub(mid_x + 1) as usize;
+        buf.set_stringn(
+            mid_x,
+            area.y,
+            &middle,
+            free,
+            style.patch(self.theme.muted()),
+        );
     }
 
     fn draw_images(&mut self, buf: &mut Buffer, x: u16, y: u16, width: u16) {
@@ -295,6 +404,7 @@ impl App {
         let mut right = body.right();
         let mut files = None;
         let mut outline = None;
+        let editing = self.edit.is_some();
         if body.height >= 7 && !self.focus_mode {
             let (wanted, forced) = match self.show_files {
                 Some(v) => (v, true),
@@ -316,6 +426,7 @@ impl App {
                 left += w;
             }
             let (wanted, forced) = match self.show_outline {
+                _ if editing => (false, false),
                 Some(v) => (v, true),
                 None => (true, false),
             };
@@ -666,7 +777,7 @@ impl App {
                 Focus::Files => {
                     format!("files: {down}/{up} move  Enter open  space fold  T titles")
                 }
-                Focus::Content => String::new(),
+                Focus::Content | Focus::Editor => String::new(),
             }
         };
         let hints = if area.width >= 48 {

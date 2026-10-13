@@ -3,7 +3,7 @@ layout: layouts/page.njk
 title: Contributing
 description: How mido is put together, how to add a block type, and how to write and review snapshot tests.
 tags: docs
-order: 10
+order: 11
 ---
 
 # Contributing
@@ -64,11 +64,12 @@ Say you want to render GitHub alerts, the `> [!NOTE]` blockquotes. The change to
 
 Snapshots are the main test style, through insta. The rendered text is the contract, so a change that looks different fails until someone approves it.
 
-There are three kinds:
+There are a few kinds:
 
 - **Layout snapshots** in `tests/layout.rs` render a fixture from `tests/fixtures/` at 60 columns with `layout` and snapshot the plain lines. Add a fixture file for a new element and a line to `snapshots_at_60_columns`.
 - **Screen snapshots** in `tests/app.rs` drive the whole app through ratatui's `TestBackend` at 80, 120 or 140 columns, press keys with `app.press`, and snapshot the terminal buffer. Use these when panels, overlays or the status bar change.
 - **Diagram snapshots** in `core/render/mermaid/` cover each Mermaid type.
+- **Editor tests** in `tests/editor.rs` open a file from a temporary folder in the editor, type with `app.press`, save with `Ctrl-s`, and read the file back. `tests/edit.rs` saves every Markdown file in the repo unedited and checks the bytes match, and runs property tests over undo and redo.
 - **The theme gallery** in `tests/gallery.rs` draws one screen per built-in theme and checks each paints its own colors. `just gallery` writes the pictures to `target/gallery`, and the docs site publishes them.
 
 Writing one:

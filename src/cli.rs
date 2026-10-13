@@ -21,8 +21,12 @@ pub const BANNER: &str = concat!(
     about = "Markdown In, Document Out. A terminal Markdown reader."
 )]
 pub struct Cli {
-    /// Markdown file or folder to read, - for stdin, docs for the bundled documentation, or themes to list the themes
+    /// Markdown file or folder to read, - for stdin, docs for the bundled documentation, themes to list the themes, or new to create a file
     pub path: Option<PathBuf>,
+
+    /// With new, the Markdown file to create and open in the editor
+    #[arg(value_name = "FILE")]
+    pub file: Option<PathBuf>,
 
     /// Print styled text to stdout instead of opening the viewer
     #[arg(short, long)]

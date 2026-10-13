@@ -1,0 +1,18 @@
+---
+source: tests/editor.rs
+expression: editing
+---
+"                                                            "
+"                                                            "
+"  # Groceries                                               "
+"                                                            "
+"  Things to buy:                                            "
+"                                                            "
+"  - apples                                                  "
+"  - [ ] bread                                               "
+"                                                            "
+"  > keep it short                                           "
+"                                                            "
+"                                                            "
+"                                                            "
+" note.md   Ctrl-s save  Esc done  F1 keys       Ln 1, Col 1 "

@@ -15,7 +15,7 @@ pub fn parse(text: &str) -> Document {
     builder.finish()
 }
 
-fn options() -> Options {
+pub(crate) fn options() -> Options {
     Options::ENABLE_TABLES
         | Options::ENABLE_FOOTNOTES
         | Options::ENABLE_STRIKETHROUGH

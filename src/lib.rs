@@ -2,6 +2,7 @@ pub mod app;
 pub mod cli;
 pub mod config;
 pub mod docs;
+pub mod edit;
 pub mod project;
 pub mod themes;
 

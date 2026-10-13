@@ -44,6 +44,8 @@ Links show their URL dimmed after the text, so you can see where they go before 
 
 ## Editing
 
+`e` opens the file in mido's own editor, at the part you were reading, and `Esc` comes back. See [Editing](editing.md).
+
 `E` suspends the viewer, opens the current file in `$VISUAL` or `$EDITOR`, and reloads the document when the editor exits. The terminal is restored cleanly on the way out and back.
 
 ## Live reload

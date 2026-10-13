@@ -3,7 +3,7 @@ layout: layouts/page.njk
 title: What renders
 description: Every Markdown element mido draws, how it looks, and how Mermaid diagrams become text.
 tags: docs
-order: 6
+order: 7
 ---
 
 # What renders

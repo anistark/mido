@@ -3,7 +3,7 @@ layout: layouts/page.njk
 title: FAQ
 description: Answers about colors, fonts, narrow terminals, pipes and what mido does not do yet.
 tags: docs
-order: 9
+order: 10
 ---
 
 # FAQ
@@ -30,7 +30,7 @@ Without `-p`, output that is not a terminal is written as plain text, so `mido f
 
 ## Can I edit the file?
 
-`E` opens the file in `$VISUAL` or `$EDITOR` and reloads it when you come back. A built-in editor is planned.
+Yes. `e` opens it in mido's own [editor](editing.md), which knows enough Markdown to continue lists and toggle tasks, and `Ctrl-s` saves. `E` opens the file in `$VISUAL` or `$EDITOR` instead and reloads it when you come back.
 
 ## Do images show?
 

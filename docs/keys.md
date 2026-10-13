@@ -57,6 +57,7 @@ The tables below are generated from the keymap in the source, so they cannot dri
 | --- | --- |
 | `/` | Search, Enter to keep, Esc to cancel |
 | `n` / `N` | Next / previous match |
+| `e` | Edit the file in mido |
 | `E` | Edit the file in $EDITOR, reload on return |
 
 ## Help and quit
@@ -65,6 +66,31 @@ The tables below are generated from the keymap in the source, so they cannot dri
 | --- | --- |
 | `?`, `h` | This help |
 | `q` | Quit |
+
+## In the editor
+
+| Key | Action |
+| --- | --- |
+| `Ctrl-s` | Save |
+| `F1` | This help |
+| `Esc` | Back to reading, asks about unsaved work |
+| `Ctrl-z` / `Ctrl-y` | Undo / redo |
+| `Ctrl-x` / `Ctrl-c` | Cut / copy the selection |
+| `Ctrl-v` | Paste |
+| `Ctrl-a` | Select everything |
+| `Ctrl-f` | Find in the file, Enter keeps, Esc cancels |
+| `Ctrl-n` / `Ctrl-p` | Next / previous match |
+| `Ctrl-t` | Check a task, or make the line one |
+| `Shift` with a move | Select, and so does a drag |
+| `Ctrl-←` / `Ctrl-→` | Word left / right, or Alt-b / Alt-f |
+| `Ctrl-↑` / `Ctrl-↓` | Paragraph up / down |
+| `Home` / `End` | Line start / end |
+| `Ctrl-Home` / `Ctrl-End` | Top / bottom |
+| `Alt-Backspace` | Delete a word back, or Ctrl-w |
+| `Alt-Delete` | Delete a word forward |
+| `Enter` | New line, continuing a list, task or quote |
+| `Tab` / `Shift-Tab` | Nest a list item deeper / shallower |
+| Backtick, `*` | Typed in pairs, or wrap the selection |
 
 ## Remapping
 
@@ -78,6 +104,8 @@ images = []
 ```
 
 Keys are written as a single character, which keeps its case, a name (`space`, `enter`, `esc`, `tab`, `backspace`, `up`, `down`, `left`, `right`, `pageup`, `pagedown`, `home`, `end`, `f1` to `f12`), or either with a `ctrl-` or `alt-` prefix. `Esc`, `Tab`, `Ctrl-c` and the panel keys are fixed. `Enter`, `PgDn`, `PgUp`, `Home` and `End` scroll, page and jump unless a binding takes them.
+
+The editor's actions have keys of their own, apart from the reader's, so `ctrl-f` finds in the editor and pages down in the reader. They need a `ctrl-` or `alt-` prefix or a named key, since a plain letter types, and in the editor `Ctrl-c` copies.
 
 | Action | Default | What it does |
 | --- | --- | --- |
@@ -106,5 +134,17 @@ Keys are written as a single character, which keeps its case, a name (`space`, `
 | `next_match` | `n` | Next match |
 | `prev_match` | `N` | Previous match |
 | `edit` | `E` | Edit the file in $EDITOR |
+| `editor` | `e` | Edit the file in mido's own editor |
 | `help` | `?`, `h` | Key help |
 | `quit` | `q` | Quit |
+| `save` | `Ctrl-s` | Save the file |
+| `undo` | `Ctrl-z` | Undo |
+| `redo` | `Ctrl-y` | Redo |
+| `cut` | `Ctrl-x` | Cut the selection |
+| `copy` | `Ctrl-c` | Copy the selection, to the system clipboard too |
+| `paste` | `Ctrl-v` | Paste what was cut or copied |
+| `select_all` | `Ctrl-a` | Select everything |
+| `find` | `Ctrl-f` | Find in the file |
+| `find_next` | `Ctrl-n` | Next match |
+| `find_prev` | `Ctrl-p` | Previous match |
+| `toggle_task` | `Ctrl-t` | Check or uncheck a task, or make the line one |

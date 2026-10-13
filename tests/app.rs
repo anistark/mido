@@ -63,7 +63,7 @@ fn readme_view_overlays_and_search() {
     press(&mut app, KeyCode::Char('G'));
     let out = screen(&mut app, &mut terminal);
     assert!(
-        out.contains("This help") && out.contains("Quit"),
+        out.contains("Typed in pairs"),
         "G scrolls the help to its end:\n{out}"
     );
     press(&mut app, KeyCode::Esc);

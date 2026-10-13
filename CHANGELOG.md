@@ -7,6 +7,13 @@ All notable changes to mido are recorded here. The format follows [Keep a Change
 ### Added
 
 - `--help` and `--version` open with a pixel-font `mido` banner with the version beside it.
+- A built-in editor. `e` swaps the page for its Markdown source at the part you were reading, colored with the theme, and `Esc` swaps back, asking first about unsaved changes. Undo and redo, selection with `Shift` or the mouse, cut, copy and paste, word and paragraph moves, and find in the file with `Ctrl-f`.
+- Markdown help in the editor: `Enter` continues a list, task or quote and ends an empty one, `Tab` and `Shift-Tab` nest a list item, `Ctrl-t` checks a task or makes the line one, and backticks and asterisks are typed in pairs or wrap the selection.
+- `Ctrl-s` saves through a temporary file and a rename, keeping line endings, a byte order mark and the trailing newline as they were. A file changed on disk since it was opened is not overwritten without asking.
+- `mido new <file>`, and opening a Markdown path that does not exist, start the file in the editor and create it on the first save.
+- Copying in the editor also puts the text on the system clipboard through OSC 52, and a terminal paste arrives as one paste.
+- A panic while editing writes unsaved changes to a hidden `.<name>.mido-recover` file beside the original and prints its path.
+- Editor keys in `[keys]`: `save`, `undo`, `redo`, `cut`, `copy`, `paste`, `select_all`, `find`, `find_next`, `find_prev` and `toggle_task`, looked up apart from the reader's keys, and `editor` for `e`.
 
 ## [0.5.1] - 2026-10-01
 

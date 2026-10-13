@@ -3,7 +3,7 @@ layout: layouts/page.njk
 title: Themes
 description: Built-in themes, light and dark detection, writing your own theme, glyph tiers and fonts.
 tags: docs
-order: 8
+order: 9
 ---
 
 # Themes

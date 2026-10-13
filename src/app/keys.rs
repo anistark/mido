@@ -30,8 +30,41 @@ pub enum Action {
     NextMatch,
     PrevMatch,
     Edit,
+    Editor,
     Help,
     Quit,
+    Save,
+    Undo,
+    Redo,
+    Cut,
+    Copy,
+    Paste,
+    SelectAll,
+    Find,
+    FindNext,
+    FindPrev,
+    ToggleTask,
+}
+
+impl Action {
+    /// Whether the action belongs to the editor, whose keys are looked up apart from the
+    /// reader's, so `ctrl-f` can find in the editor and page down in the reader.
+    pub fn in_editor(self) -> bool {
+        matches!(
+            self,
+            Action::Save
+                | Action::Undo
+                | Action::Redo
+                | Action::Cut
+                | Action::Copy
+                | Action::Paste
+                | Action::SelectAll
+                | Action::Find
+                | Action::FindNext
+                | Action::FindPrev
+                | Action::ToggleTask
+        )
+    }
 }
 
 /// Name in the config, default keys, and what the action does.
@@ -121,8 +154,45 @@ pub const ACTIONS: &[(Action, &str, &[&str], &str)] = &[
     (Action::NextMatch, "next_match", &["n"], "Next match"),
     (Action::PrevMatch, "prev_match", &["N"], "Previous match"),
     (Action::Edit, "edit", &["E"], "Edit the file in $EDITOR"),
+    (
+        Action::Editor,
+        "editor",
+        &["e"],
+        "Edit the file in mido's own editor",
+    ),
     (Action::Help, "help", &["?", "h"], "Key help"),
     (Action::Quit, "quit", &["q"], "Quit"),
+    (Action::Save, "save", &["ctrl-s"], "Save the file"),
+    (Action::Undo, "undo", &["ctrl-z"], "Undo"),
+    (Action::Redo, "redo", &["ctrl-y"], "Redo"),
+    (Action::Cut, "cut", &["ctrl-x"], "Cut the selection"),
+    (
+        Action::Copy,
+        "copy",
+        &["ctrl-c"],
+        "Copy the selection, to the system clipboard too",
+    ),
+    (
+        Action::Paste,
+        "paste",
+        &["ctrl-v"],
+        "Paste what was cut or copied",
+    ),
+    (
+        Action::SelectAll,
+        "select_all",
+        &["ctrl-a"],
+        "Select everything",
+    ),
+    (Action::Find, "find", &["ctrl-f"], "Find in the file"),
+    (Action::FindNext, "find_next", &["ctrl-n"], "Next match"),
+    (Action::FindPrev, "find_prev", &["ctrl-p"], "Previous match"),
+    (
+        Action::ToggleTask,
+        "toggle_task",
+        &["ctrl-t"],
+        "Check or uncheck a task, or make the line one",
+    ),
 ];
 
 enum Row {
@@ -217,6 +287,7 @@ const SECTIONS: &[(&str, &[Row])] = &[
                 "",
                 "Next / previous match",
             ),
+            Row::One(Action::Editor, "Edit the file in mido"),
             Row::One(Action::Edit, "Edit the file in $EDITOR, reload on return"),
         ],
     ),
@@ -225,6 +296,36 @@ const SECTIONS: &[(&str, &[Row])] = &[
         &[
             Row::One(Action::Help, "This help"),
             Row::One(Action::Quit, "Quit"),
+        ],
+    ),
+    (
+        "In the editor",
+        &[
+            Row::One(Action::Save, "Save"),
+            Row::Fixed("`F1`", "This help"),
+            Row::Fixed("`Esc`", "Back to reading, asks about unsaved work"),
+            Row::Pair(Action::Undo, Action::Redo, "", "Undo / redo"),
+            Row::Pair(Action::Cut, Action::Copy, "", "Cut / copy the selection"),
+            Row::One(Action::Paste, "Paste"),
+            Row::One(Action::SelectAll, "Select everything"),
+            Row::One(Action::Find, "Find in the file, Enter keeps, Esc cancels"),
+            Row::Pair(
+                Action::FindNext,
+                Action::FindPrev,
+                "",
+                "Next / previous match",
+            ),
+            Row::One(Action::ToggleTask, "Check a task, or make the line one"),
+            Row::Fixed("`Shift` with a move", "Select, and so does a drag"),
+            Row::Fixed("`Ctrl-←` / `Ctrl-→`", "Word left / right, or Alt-b / Alt-f"),
+            Row::Fixed("`Ctrl-↑` / `Ctrl-↓`", "Paragraph up / down"),
+            Row::Fixed("`Home` / `End`", "Line start / end"),
+            Row::Fixed("`Ctrl-Home` / `Ctrl-End`", "Top / bottom"),
+            Row::Fixed("`Alt-Backspace`", "Delete a word back, or Ctrl-w"),
+            Row::Fixed("`Alt-Delete`", "Delete a word forward"),
+            Row::Fixed("`Enter`", "New line, continuing a list, task or quote"),
+            Row::Fixed("`Tab` / `Shift-Tab`", "Nest a list item deeper / shallower"),
+            Row::Fixed("Backtick, `*`", "Typed in pairs, or wrap the selection"),
         ],
     ),
 ];
@@ -282,6 +383,10 @@ impl KeyChord {
         Ok(Self { code, ctrl, alt })
     }
 
+    fn types_text(&self) -> bool {
+        !self.ctrl && !self.alt && matches!(self.code, KeyCode::Char(_))
+    }
+
     pub fn from_event(key: &KeyEvent) -> Self {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let code = match key.code {
@@ -330,7 +435,7 @@ impl fmt::Display for KeyChord {
 #[derive(Debug, Clone)]
 pub struct Keymap {
     bindings: HashMap<Action, Vec<KeyChord>>,
-    lookup: HashMap<KeyChord, Action>,
+    lookup: HashMap<(bool, KeyChord), Action>,
 }
 
 impl Default for Keymap {
@@ -351,7 +456,8 @@ impl Default for Keymap {
 
 impl Keymap {
     /// Applies `[keys]` from the config. A listed action loses its default keys, and a key
-    /// taken by it is removed from whichever action had it before.
+    /// taken by it is removed from whichever action had it before, in the reader or in the
+    /// editor, whichever the action belongs to.
     pub fn with_overrides(overrides: &BTreeMap<String, Vec<String>>) -> Result<Self, String> {
         let mut bindings = Self::default().bindings;
         for (name, keys) in overrides {
@@ -364,8 +470,17 @@ impl Keymap {
                 .iter()
                 .map(|k| KeyChord::parse(k))
                 .collect::<Result<Vec<_>, _>>()?;
-            for other in bindings.values_mut() {
-                other.retain(|c| !chords.contains(c));
+            if action.in_editor()
+                && let Some(typed) = chords.iter().find(|c| c.types_text())
+            {
+                return Err(format!(
+                    "`{typed}` for `{name}` would type text in the editor, use a ctrl- or alt- key"
+                ));
+            }
+            for (other, keys) in &mut bindings {
+                if other.in_editor() == action.in_editor() {
+                    keys.retain(|c| !chords.contains(c));
+                }
             }
             bindings.insert(action, chords);
         }
@@ -375,13 +490,21 @@ impl Keymap {
     fn from_bindings(bindings: HashMap<Action, Vec<KeyChord>>) -> Self {
         let lookup = bindings
             .iter()
-            .flat_map(|(action, chords)| chords.iter().map(|c| (*c, *action)))
+            .flat_map(|(action, chords)| chords.iter().map(|c| ((action.in_editor(), *c), *action)))
             .collect();
         Self { bindings, lookup }
     }
 
+    /// The reader's action for a key.
     pub fn action(&self, key: &KeyEvent) -> Option<Action> {
-        self.lookup.get(&KeyChord::from_event(key)).copied()
+        self.lookup
+            .get(&(false, KeyChord::from_event(key)))
+            .copied()
+    }
+
+    /// The editor's action for a key.
+    pub fn edit_action(&self, key: &KeyEvent) -> Option<Action> {
+        self.lookup.get(&(true, KeyChord::from_event(key))).copied()
     }
 
     pub fn keys(&self, action: Action) -> &[KeyChord] {
@@ -454,6 +577,9 @@ pub fn markdown() -> String {
         "`end`, `f1` to `f12`), or either with a `ctrl-` or `alt-` prefix. `Esc`, `Tab`, `Ctrl-c` ",
         "and the panel keys are fixed. `Enter`, `PgDn`, `PgUp`, `Home` and `End` scroll, page and ",
         "jump unless a binding takes them.\n\n",
+        "The editor's actions have keys of their own, apart from the reader's, so `ctrl-f` finds in ",
+        "the editor and pages down in the reader. They need a `ctrl-` or `alt-` prefix or a named ",
+        "key, since a plain letter types, and in the editor `Ctrl-c` copies.\n\n",
         "| Action | Default | What it does |\n| --- | --- | --- |\n",
     ));
     let keymap = Keymap::default();
@@ -544,5 +670,23 @@ mod tests {
         };
         assert!(bad("jump", "j").contains("unknown action `jump`"));
         assert!(bad("quit", "hyper-q").contains("`hyper-q` is not a key"));
+        assert!(bad("save", "s").contains("would type text"));
+    }
+
+    #[test]
+    fn the_editor_has_its_own_keys() {
+        let keymap = Keymap::default();
+        let ctrl_f = event(KeyCode::Char('f'), KeyModifiers::CONTROL);
+        assert_eq!(keymap.action(&ctrl_f), Some(Action::PageDown));
+        assert_eq!(keymap.edit_action(&ctrl_f), Some(Action::Find));
+        let keymap = Keymap::with_overrides(&BTreeMap::from([(
+            "find".to_string(),
+            vec!["ctrl-s".to_string()],
+        )]))
+        .unwrap();
+        let ctrl_s = event(KeyCode::Char('s'), KeyModifiers::CONTROL);
+        assert_eq!(keymap.edit_action(&ctrl_s), Some(Action::Find));
+        assert!(keymap.keys(Action::Save).is_empty());
+        assert_eq!(keymap.action(&ctrl_f), Some(Action::PageDown));
     }
 }

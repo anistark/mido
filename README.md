@@ -36,7 +36,10 @@ mido -p README.md       # print styled text to stdout, pipe it to less -R
 mido -w 80 notes.md     # cap the width (default: full terminal width)
 mido -t nord notes.md   # pick a theme, mido themes lists them
 mido docs               # read the bundled documentation offline
+mido new notes.md       # start a new file in the editor
 ```
+
+Press `e` to edit the file in place: the Markdown source, colored with the theme, with lists that continue on `Enter`, tasks that toggle with `Ctrl-t`, and `Ctrl-s` to save. `Esc` goes back to reading.
 
 The full documentation is at [anistark.github.io/mido](https://anistark.github.io/mido).
 
@@ -62,6 +65,7 @@ Piping without `-p` prints plain text, so `mido file.md > out.txt` never leaks e
 | `]` / `[`, `Enter`, click | Select the next / previous link, follow it |
 | `H` / `L` | Back / forward through visited pages |
 | `Ctrl-p` | Find a file in the folder |
+| `e` | Edit the file in mido, `Ctrl-s` saves, `Esc` returns |
 | `E` | Edit the file in `$EDITOR`, reload on return |
 | `/` then `n` / `N` | Search, next, previous |
 | `t` | Table of contents |
