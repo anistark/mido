@@ -2,7 +2,8 @@ use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::Shell;
 use mido::app::keys::Keymap;
 use mido::app::{App, Settings, Source};
 use mido::cli::{BANNER, Cli};
@@ -18,6 +19,13 @@ const MAN_PAGE: &str = include_str!(concat!(env!("OUT_DIR"), "/mido.1"));
 
 fn main() -> Result<()> {
     let mut cli = Cli::parse();
+    if cli
+        .path
+        .as_deref()
+        .is_some_and(|p| p == Path::new("completions") && !p.exists())
+    {
+        return completions(cli.file.as_deref());
+    }
     let creating = cli
         .path
         .as_deref()
@@ -30,7 +38,7 @@ fn main() -> Result<()> {
         );
     } else if let Some(file) = &cli.file {
         bail!(
-            "unexpected argument {}, a second path only goes with new",
+            "unexpected argument {}, a second path only goes with new or completions",
             file.display()
         );
     }
@@ -57,7 +65,11 @@ fn main() -> Result<()> {
     if let Some(width) = cli.width {
         config.width = Some(width);
     }
-    let mode = Theme::detect_mode();
+    let mode = if cli.no_color {
+        ColorMode::Mono
+    } else {
+        Theme::detect_mode()
+    };
     if listing_themes {
         let mode = if io::stdout().is_terminal() {
             mode
@@ -205,6 +217,19 @@ fn hyperlink(link: &Link, base: Option<&Path>) -> Option<String> {
             .replace('\\', "/")
             .replace(' ', "%20")
     ))
+}
+
+/// Prints the completion script for a shell to stdout.
+fn completions(shell: Option<&Path>) -> Result<()> {
+    const SHELLS: &str = "bash, zsh, fish, elvish or powershell";
+    let name = shell
+        .and_then(Path::to_str)
+        .with_context(|| format!("mido completions needs a shell: {SHELLS}"))?;
+    let shell: Shell = name
+        .parse()
+        .map_err(|_| anyhow::anyhow!("unknown shell `{name}`, expected {SHELLS}"))?;
+    clap_complete::generate(shell, &mut Cli::command(), "mido", &mut io::stdout().lock());
+    Ok(())
 }
 
 fn is_markdown(path: Option<&Path>, config: &Config) -> bool {

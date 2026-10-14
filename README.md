@@ -37,6 +37,7 @@ mido -w 80 notes.md     # cap the width (default: full terminal width)
 mido -t nord notes.md   # pick a theme, mido themes lists them
 mido docs               # read the bundled documentation offline
 mido new notes.md       # start a new file in the editor
+mido completions zsh    # shell completions for bash, zsh, fish, elvish, powershell
 ```
 
 Press `e` to edit the file in place: the Markdown source, colored with the theme, with lists that continue on `Enter`, tasks that toggle with `Ctrl-t`, and `Ctrl-s` to save. `Esc` goes back to reading. `v` puts a live preview beside the source, scrolling along with it.

@@ -11,6 +11,7 @@ order: 2
 ```
 mido [OPTIONS] [PATH]
 mido new <FILE>
+mido completions <SHELL>
 ```
 
 `PATH` is a Markdown file, a folder, `-` for stdin, `docs` for the bundled documentation, or `themes` to list the themes. With no path, mido opens the current folder. A Markdown file that does not exist yet opens in the [editor](editing.md) and is created on the first save, and `mido new <FILE>` does the same for any name.
@@ -23,6 +24,7 @@ mido new <FILE>
 | `-w`, `--width <COLS>` | Cap the content width in columns. The default is the full terminal width |
 | `-t`, `--theme <NAME>` | Use a theme by name or a theme file by path, or `auto` to follow the terminal background |
 | `--config <FILE>` | Read this config file instead of the one in the config folder |
+| `--no-color` | Draw without color, the same as setting `NO_COLOR`. Structure stays through bold, italic and rules |
 | `--remote-images` | Download remote images and live badge values. Images are cached in the user cache directory with a 10 MB cap |
 | `--man` | Print the man page as roff to stdout |
 | `-h`, `--help` | Show the help |
@@ -41,7 +43,20 @@ mido -t nord notes.md   # read in the Nord theme
 mido themes             # list the themes with a swatch of each
 mido docs               # read this documentation offline
 mido new notes.md       # start a new file in the editor
+mido completions zsh    # print zsh completions
 ```
+
+## Shell completions
+
+`mido completions <SHELL>` prints a completion script for `bash`, `zsh`, `fish`, `elvish` or `powershell` to stdout. Save it where your shell looks for completions:
+
+```sh
+mido completions bash > ~/.local/share/bash-completion/completions/mido
+mido completions zsh > ~/.zfunc/_mido        # with fpath+=~/.zfunc before compinit
+mido completions fish > ~/.config/fish/completions/mido.fish
+```
+
+For PowerShell, add `mido completions powershell | Out-String | Invoke-Expression` to your profile. As with `docs` and `themes`, a file or folder called `completions` in the current directory wins over the command.
 
 ## Width
 

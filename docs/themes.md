@@ -23,7 +23,7 @@ Or set it in the [config file](configuration.md):
 theme = "tokyo-night"
 ```
 
-The default is `auto`, which asks the terminal whether its background is light or dark and uses `mido-light` or `mido-dark` to match. `dark_theme` and `light_theme` change that pair, and `background` skips the question. `NO_COLOR` still turns every color off, whichever theme is set.
+The default is `auto`, which asks the terminal whether its background is light or dark and uses `mido-light` or `mido-dark` to match. `dark_theme` and `light_theme` change that pair, and `background` skips the question. `NO_COLOR` and `--no-color` still turn every color off, whichever theme is set.
 
 The [theme gallery](https://anistark.github.io/mido/gallery/) shows the same page in every built-in theme, drawn in CI from the screen buffer the tests use.
 

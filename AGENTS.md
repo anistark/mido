@@ -56,7 +56,7 @@ In the split the preview is the same reader on the same `Layout`, fed by `Previe
 
 | Path | What it owns |
 | --- | --- |
-| `src/main.rs`, `src/cli.rs` | clap entry and mode dispatch: file, folder, stdin, print, `docs`, `themes`, `--man`. Loads the config and resolves the theme before the TUI starts |
+| `src/main.rs`, `src/cli.rs` | clap entry and mode dispatch: file, folder, stdin, print, `docs`, `themes`, `new`, `completions`, `--man`. Loads the config and resolves the theme before the TUI starts |
 | `src/config.rs` | Config dir lookup, `config.toml` then the nearest `.mido.toml`, merging, theme resolution by name or path with `extends`, background detection through terminal-light |
 | `src/themes.rs` | `mido themes`: the list with swatches |
 | `core/markdown/` | `parse.rs` builds the tree from pulldown-cmark events, `document.rs` is the data model plus front matter fields, `slug.rs` makes GitHub-compatible anchors |
@@ -133,7 +133,7 @@ The design is part of the product. `docs/rendering.md` says what each element lo
 - Every element has a treatment: H1 is a filled title chip, H2 a text-width underline, inline code sits padded on the code background, links show their URL dimmed, front matter and badges are two-tone label chips, an image alone in a paragraph becomes a picture and an inline one becomes `■ alt (path)`.
 - Wrapping is in-house. `wrap()` takes `Piece`s: text pieces break at spaces, atomic pieces never break, and adjacent atomic pieces form one unbreakable word, which is how a two-part chip stays together. Trailing spaces are trimmed unless they carry a background.
 - Layout owns the measure. Full terminal width by default, `--width` caps and centers, two columns of gutter each side from 60 wide. Exactly one blank line between blocks, two before H1 and H2.
-- Color tiers: truecolor when `COLORTERM` says so, else 256, else 16. `NO_COLOR` gives mono, and every element has a text-only form there: backticks for code, a heavy rule under H1, `[key: value]` for chips.
+- Color tiers: truecolor when `COLORTERM` says so, else 256, else 16. `NO_COLOR` or `--no-color` gives mono, and every element has a text-only form there: backticks for code, a heavy rule under H1, `[key: value]` for chips.
 - Anything mido cannot render, raw HTML, math, a diagram type the crates miss, is shown as source, never dropped.
 
 ---
@@ -196,7 +196,7 @@ Both release recipes require `main` and a clean tree.
 - **Terminal safety is ratatui's init and restore plus a chained panic hook.** `ratatui::try_init()` installs the hook that leaves raw mode and the alternate screen on a panic, `App::run` chains one that drops mouse capture first, and the `$EDITOR` shell-out restores and re-enters the same way. Keep that pairing when adding a mode.
 - **Tests must not read the developer's config.** The binary tests in `tests/docs.rs` run mido for real, so a personal `config.toml` could change what they print. Set `MIDO_CONFIG_DIR` to an empty folder when a test spawns the binary, and build `App` through `Settings::default()` in screen tests.
 - **Background detection writes to the terminal.** `config::detect_background` sends an OSC 11 query and reads the answer in raw mode, so it runs once in `main` before `ratatui::try_init`, and only when stdin and stdout are both a tty. Never call it from inside the TUI.
-- **`mido themes` and `mido docs` are names, not subcommands.** A local path called `themes` or `docs` wins over them.
+- **`mido themes`, `mido docs`, `mido new` and `mido completions` are names, not subcommands.** A local path with that name wins over them. `new` and `completions` take their argument from the second positional, `Cli::file`.
 - **The changelog regex in `just publish-crate` is not escaped.** The dots in the version match any character, which has never mattered.
 - **syntect's Markdown grammar is far too slow to color the editor.** It costs about half a millisecond a line under fancy-regex, so a screen of source would miss a frame. `core/render/source.rs` styles the source from pulldown-cmark's offsets instead, which parses 5k lines in under a millisecond, and keeps syntect for fenced code, cached by language and body.
 - **The editor draws twice over.** The textarea widget lays out glyphs, wraps and scrolls with every style of its own set blank, then `TextAreaEditor::render` walks the painted rows through `screen_to_data` and sets each cell's style: theme, syntax runs, cursor line, selection, find hits. The real terminal cursor is placed with `Frame::set_cursor_position`, so screen snapshots do not show it, and tests read it from the backend.

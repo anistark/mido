@@ -2,6 +2,13 @@
 
 All notable changes to mido are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com), and versions follow semver. Before 1.0, a minor release may change keys or configuration.
 
+## [Unreleased]
+
+### Added
+
+- `mido completions <shell>` prints a completion script for bash, zsh, fish, elvish or PowerShell.
+- `--no-color` draws without color, the same as setting `NO_COLOR`.
+
 ## [0.6.0] - 2026-10-13
 
 ### Added

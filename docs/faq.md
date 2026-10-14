@@ -14,7 +14,7 @@ The outline card and the files sidebar appear only while the document keeps 60 c
 
 ## The colors look wrong
 
-mido picks truecolor when `COLORTERM` is `truecolor` or `24bit`, and 256 colors otherwise. Inside tmux or over SSH the variable is sometimes missing, so export it if your terminal supports truecolor. Set `NO_COLOR` to turn colors off entirely.
+mido picks truecolor when `COLORTERM` is `truecolor` or `24bit`, and 256 colors otherwise. Inside tmux or over SSH the variable is sometimes missing, so export it if your terminal supports truecolor. Set `NO_COLOR`, or pass `--no-color`, to turn colors off entirely.
 
 ## Can I change the font?
 

@@ -21,10 +21,10 @@ pub const BANNER: &str = concat!(
     about = "Markdown In, Document Out. A terminal Markdown reader."
 )]
 pub struct Cli {
-    /// Markdown file or folder to read, - for stdin, docs for the bundled documentation, themes to list the themes, or new to create a file
+    /// Markdown file or folder to read, - for stdin, docs for the bundled documentation, themes to list the themes, new to create a file, or completions to print shell completions
     pub path: Option<PathBuf>,
 
-    /// With new, the Markdown file to create and open in the editor
+    /// With new, the Markdown file to create and open in the editor. With completions, the shell: bash, zsh, fish, elvish or powershell
     #[arg(value_name = "FILE")]
     pub file: Option<PathBuf>,
 
@@ -43,6 +43,10 @@ pub struct Cli {
     /// Read this config file instead of the one in the config folder
     #[arg(long, value_name = "FILE")]
     pub config: Option<PathBuf>,
+
+    /// Draw without color, the same as setting NO_COLOR
+    #[arg(long)]
+    pub no_color: bool,
 
     /// Download remote images, cached in the user cache dir with a 10 MB cap
     #[arg(long)]
