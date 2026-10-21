@@ -9,6 +9,10 @@ All notable changes to mido are recorded here. The format follows [Keep a Change
 - `mido completions <shell>` prints a completion script for bash, zsh, fish, elvish or PowerShell.
 - `--no-color` draws without color, the same as setting `NO_COLOR`.
 
+### Security
+
+- Remote images are fetched with `webpki-roots` 1.0.10 and `rustls-webpki` 0.103.16, which stop trusting the eight compromised eMudhra intermediate CAs. Older builds would accept a certificate forged with those keys.
+
 ## [0.6.0] - 2026-10-13
 
 ### Added
