@@ -8,6 +8,7 @@ All notable changes to mido are recorded here. The format follows [Keep a Change
 
 - `mido completions <shell>` prints a completion script for bash, zsh, fish, elvish or PowerShell.
 - `--no-color` draws without color, the same as setting `NO_COLOR`.
+- `mido-high-contrast`, a built-in theme for low vision: white on black, with every color that carries text at least 7:1 against what it sits on (WCAG AAA), code highlighting included.
 
 ### Security
 

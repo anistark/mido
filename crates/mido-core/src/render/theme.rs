@@ -137,6 +137,10 @@ pub const BUILTIN: &[(&str, &str)] = &[
     ("mido-light", include_str!("themes/mido-light.toml")),
     ("mido-reading", include_str!("themes/mido-reading.toml")),
     (
+        "mido-high-contrast",
+        include_str!("themes/mido-high-contrast.toml"),
+    ),
+    (
         "catppuccin-mocha",
         include_str!("themes/catppuccin-mocha.toml"),
     ),
@@ -695,6 +699,92 @@ mod tests {
         assert_eq!(parse_color("bright-blue"), Some(Color::LightBlue));
         assert_eq!(parse_color("208"), Some(Color::Indexed(208)));
         assert_eq!(parse_color("#ggg"), None);
+    }
+
+    fn contrast(a: Color, b: Color) -> f64 {
+        let luminance = |c: Color| {
+            let Color::Rgb(r, g, b) = c else {
+                panic!("{c:?} is not a truecolor value")
+            };
+            let channel = |v: u8| {
+                let v = f64::from(v) / 255.0;
+                if v <= 0.03928 {
+                    v / 12.92
+                } else {
+                    ((v + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+        };
+        let (x, y) = (luminance(a), luminance(b));
+        (x.max(y) + 0.05) / (x.min(y) + 0.05)
+    }
+
+    #[test]
+    fn high_contrast_meets_wcag_aaa() {
+        let t = Theme::builtin("mido-high-contrast").unwrap();
+        let text = [
+            ("fg", t.fg, t.bg),
+            ("fg_muted", t.fg_muted, t.bg),
+            ("fg_faint", t.fg_faint, t.bg),
+            ("accent", t.accent, t.bg),
+            ("h2", t.h2, t.bg),
+            ("h3", t.h3, t.bg),
+            ("h4", t.h4, t.bg),
+            ("h5", t.h5, t.bg),
+            ("h6", t.h6, t.bg),
+            ("h1_fg on h1", t.h1_fg, t.h1),
+            ("h1_fg on accent", t.h1_fg, t.accent),
+            ("link", t.link, t.bg),
+            ("link_url", t.link_url, t.bg),
+            ("code_fg", t.code_fg, t.code_bg),
+            ("fg on code_bg", t.fg, t.code_bg),
+            ("fg on surface", t.fg, t.surface),
+            ("fg_faint on surface", t.fg_faint, t.surface),
+            ("quote_fg", t.quote_fg, t.bg),
+            ("list_marker", t.list_marker, t.bg),
+            ("status", t.status_fg, t.status_bg),
+            ("fg_muted on status", t.fg_muted, t.status_bg),
+            ("search", t.search_fg, t.search_bg),
+            ("search current", t.search_fg, t.search_current_bg),
+            ("fg on selected_bg", t.fg, t.selected_bg),
+            ("label", t.fg_muted, t.label_bg),
+            ("label value", t.fg, t.label_value_bg),
+            ("alert_note", t.alert_note, t.bg),
+            ("alert_tip", t.alert_tip, t.bg),
+            ("alert_important", t.alert_important, t.bg),
+            ("alert_warning", t.alert_warning, t.bg),
+            ("alert_caution", t.alert_caution, t.bg),
+            ("math", t.math, t.bg),
+        ];
+        for (name, fg, bg) in text {
+            let ratio = contrast(fg, bg);
+            assert!(ratio >= 7.0, "{name} is {ratio:.2}:1, under 7:1");
+        }
+        let syntax = t.syntax_theme();
+        let colors = syntax
+            .settings
+            .foreground
+            .into_iter()
+            .chain(syntax.scopes.iter().filter_map(|s| s.style.foreground));
+        for c in colors {
+            let ratio = contrast(Color::Rgb(c.r, c.g, c.b), t.code_bg);
+            assert!(
+                ratio >= 7.0,
+                "syntax color {c:?} is {ratio:.2}:1 on code_bg"
+            );
+        }
+        let graphics = [
+            ("rule", t.rule),
+            ("table_border", t.table_border),
+            ("code_border", t.code_border),
+            ("quote_bar", t.quote_bar),
+            ("overlay_border", t.overlay_border),
+        ];
+        for (name, color) in graphics {
+            let ratio = contrast(color, t.bg);
+            assert!(ratio >= 3.0, "{name} is {ratio:.2}:1, under 3:1");
+        }
     }
 
     #[test]

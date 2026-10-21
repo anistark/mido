@@ -29,6 +29,8 @@ The [theme gallery](https://anistark.github.io/mido/gallery/) shows the same pag
 
 `mido-dark` is the theme mido has always had, and together with `mido-light` it draws on the terminal's own background. The other built-in themes paint their background too, so `nord` looks like Nord in any terminal.
 
+`mido-high-contrast` is for low vision. It paints white on black, and every color that carries text, code included, reaches at least 7:1 against what it sits on, the WCAG AAA level. Rules and borders reach at least 3:1. A test checks every pair, so the theme cannot drift below that. Set it with `--theme mido-high-contrast`, or `theme = "mido-high-contrast"` in the config to keep it.
+
 ## Writing a theme
 
 A theme is a TOML file. Put it in the `themes` folder next to your config, `~/.config/mido/themes/rose.toml`, and use it by name with `--theme rose`, or give a path anywhere with `--theme ./rose.toml`. A user theme with the name of a built-in one replaces it.
@@ -106,6 +108,7 @@ Iosevka has not been checked yet. Reports for it, or for any other font, are wel
 | `mido-dark` | dark | `catppuccin-mocha` | mido's default dark theme, on the terminal's own background. |
 | `mido-light` | light | `catppuccin-latte` | mido's light theme, on the terminal's own background. |
 | `mido-reading` | light | `gruvbox-light` | A warm, low-contrast paper palette for long reads. Paints its own background. |
+| `mido-high-contrast` | dark | `catppuccin-frappe` | High contrast for low vision: white on black, and every color that carries text at least 7:1 (WCAG AAA). Paints its own background. |
 | `catppuccin-mocha` | dark | `catppuccin-mocha` | Catppuccin Mocha, from the official palette at catppuccin.com/palette. |
 | `catppuccin-latte` | light | `catppuccin-latte` | Catppuccin Latte, from the official palette at catppuccin.com/palette. |
 | `gruvbox` | dark | `gruvbox-dark` | Gruvbox dark, medium contrast, from github.com/morhetz/gruvbox. |
