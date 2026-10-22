@@ -62,7 +62,7 @@ In the split the preview is the same reader on the same `Layout`, fed by `Previe
 | `core/markdown/` | `parse.rs` builds the tree from pulldown-cmark events, `document.rs` is the data model plus front matter fields, `slug.rs` makes GitHub-compatible anchors |
 | `core/render/layout.rs` | `Document` to styled lines at a width, with the heading, link, image and source indices |
 | `core/render/wrap.rs` | Styled word wrap over `Piece`s that never splits a style run |
-| `core/render/theme.rs`, `core/render/themes/` | The `tokens!` list, theme files in TOML with `schema = 1`, palette and `extends`, the eleven built-in themes, truecolor, 256-color and mono tiers, the syntect theme per mido theme |
+| `core/render/theme.rs`, `core/render/themes/` | The `tokens!` list, theme files in TOML with `schema = 1`, palette and `extends`, the twelve built-in themes, truecolor, 256-color and mono tiers, the syntect theme per mido theme |
 | `core/render/glyphs.rs` | The `ascii`, `unicode` and `nerd` symbol tables, carried on `Theme` as `theme.glyphs` |
 | `core/render/badge.rs` | Badge detection, static shields URL and SVG parsing, badge colors, the badge walker |
 | `core/render/syntax.rs`, `core/render/mermaid/` | syntect wrapper, Mermaid blocks to text through mmdflux and mermaid-text, in ASCII under the ascii tier |

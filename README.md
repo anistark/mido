@@ -85,7 +85,7 @@ On terminals wide enough an outline of the headings sits in a tinted card at the
 
 ## Themes and config
 
-mido picks a light or dark theme to match the terminal. Eleven are built in, from Catppuccin, Gruvbox, Nord, Tokyo Night, Dracula and Solarized to a warm paper palette for long reads, and `mido themes` shows a swatch of each. A theme is a short TOML file, so writing your own takes a few lines. The glyph set (`ascii`, `unicode` or `nerd`), the width and gutters, the keys and the Markdown extensions live in `~/.config/mido/config.toml`, and a `.mido.toml` in a project folder overrides it. See [Themes](docs/themes.md) and [Configuration](docs/configuration.md).
+mido picks a light or dark theme to match the terminal. Twelve are built in, from Catppuccin, Gruvbox, Nord, Tokyo Night, Dracula and Solarized to a warm paper palette for long reads and a high-contrast theme for low vision, and `mido themes` shows a swatch of each. A theme is a short TOML file, so writing your own takes a few lines. The glyph set (`ascii`, `unicode` or `nerd`), the width and gutters, the keys and the Markdown extensions live in `~/.config/mido/config.toml`, and a `.mido.toml` in a project folder overrides it. See [Themes](docs/themes.md) and [Configuration](docs/configuration.md).
 
 ## What renders
 
