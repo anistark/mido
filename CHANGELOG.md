@@ -9,9 +9,26 @@ All notable changes to mido are recorded here. The format follows [Keep a Change
 - `mido completions <shell>` prints a completion script for bash, zsh, fish, elvish or PowerShell.
 - `--no-color` draws without color, the same as setting `NO_COLOR`.
 - `mido-high-contrast`, a built-in theme for low vision: white on black, with every color that carries text at least 7:1 against what it sits on (WCAG AAA), code highlighting included.
+- `F` searches every Markdown file in the folder, listing each matching line as `path:line`. `Enter` opens the file at that line with the query kept for `n` and `N`.
+- `y` copies the selected link's target, or a code block on the screen, pressing it again for the next block in view. Code is copied without its trailing newline.
+- A file opens again where you left it, kept for the last 500 files in the user cache folder. `remember_position = false` turns it off.
+- UTF-16 files with a byte order mark are read and saved as UTF-16.
+- mido-core: `Layout::code` lists each code block with the lines it takes and its source.
+
+### Changed
+
+- Following a link to a file that is not Markdown, or to a URL other than `http`, `https` or `mailto`, asks before the system opens it. The system opener runs programs, so a link to `setup.command` or `install.bat` used to run it with one `Enter`.
+- A `.mido.toml` that sets something this version cannot use, an unknown setting, a bad value, an unknown key action or a missing theme, skips that setting with a warning in the status bar, or on stderr in print mode, instead of stopping mido. The user config stays strict.
+- A file that is not valid UTF-8 opens with the bad bytes shown as replacement characters and a notice, instead of failing. The editor still refuses it, so no bytes are lost. A file with NUL bytes is refused as binary.
+- Copying, in the editor or with `y`, also uses `pbcopy`, `wl-copy`, `xclip` or `xsel` outside SSH, for terminals that ignore OSC 52 such as Apple Terminal.
+
+### Fixed
+
+- A byte order mark at the start of a file no longer hides its first heading or its front matter.
 
 ### Security
 
+- Print mode drops control characters from the text and from link targets, so a document can no longer send its own escape sequences to the terminal, such as one that sets the clipboard through OSC 52 or retitles the window. The viewer already dropped them.
 - Remote images are fetched with `webpki-roots` 1.0.10 and `rustls-webpki` 0.103.16, which stop trusting the eight compromised eMudhra intermediate CAs. Older builds would accept a certificate forged with those keys.
 
 ## [0.6.0] - 2026-10-13

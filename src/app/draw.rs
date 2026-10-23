@@ -105,6 +105,7 @@ impl App {
             Mode::Help => self.draw_help(buf, body),
             Mode::Toc => self.draw_toc(buf, area),
             Mode::Finder => self.draw_finder(buf, area),
+            Mode::Grep => self.draw_grep(buf, area),
             Mode::Footnote => self.draw_footnote(buf, area),
             Mode::Prompt(prompt) => self.draw_prompt(buf, area, prompt),
             _ => {}
@@ -135,6 +136,7 @@ impl App {
         self.clamp_scroll();
         if let Some(offset) = self.pending_source.take() {
             self.scroll = self.layout.line_for_source(offset).min(self.max_scroll());
+            self.land_on_match();
         }
         if let Some(anchor) = self.pending_anchor.take() {
             match self.layout.line_for_anchor(&anchor) {
@@ -230,6 +232,7 @@ impl App {
             Prompt::Leave => " Unsaved changes ",
             Prompt::Overwrite { .. } => " Changed on disk ",
             Prompt::Quit => " Unsaved changes ",
+            Prompt::Open => " Outside mido ",
         };
         let block = self.popup_block(title);
         let inner = block.inner(popup);
@@ -372,17 +375,65 @@ impl App {
     }
 
     fn draw_finder(&mut self, buf: &mut Buffer, area: Rect) {
+        let items: Vec<(String, Vec<u32>)> = self
+            .finder
+            .hits
+            .iter()
+            .map(|h| (h.label.clone(), h.indices.clone()))
+            .collect();
+        let picker = Picker {
+            title: " Find file ".to_string(),
+            query: self.finder.query.clone(),
+            items,
+            selected: self.finder.selected,
+            empty: "No matches",
+        };
+        self.draw_picker(buf, area, picker);
+    }
+
+    fn draw_grep(&mut self, buf: &mut Buffer, area: Rect) {
+        let items: Vec<(String, Vec<u32>)> = self
+            .grep
+            .hits
+            .iter()
+            .map(|h| (h.label.clone(), h.indices.clone()))
+            .collect();
+        let title = if self.grep.query.is_empty() {
+            " Search files ".to_string()
+        } else {
+            format!(
+                " Search files {} {} ",
+                self.theme.glyphs.dot,
+                self.grep.summary()
+            )
+        };
+        let picker = Picker {
+            title,
+            query: self.grep.query.clone(),
+            items,
+            selected: self.grep.selected,
+            empty: if self.grep.query.is_empty() {
+                "Type to search every file in the folder"
+            } else {
+                "No matches"
+            },
+        };
+        self.draw_picker(buf, area, picker);
+    }
+
+    /// A popup with a query line and a list of labels, matched characters in bold.
+    fn draw_picker(&mut self, buf: &mut Buffer, area: Rect, picker: Picker) {
         let w = area.width.saturating_sub(6).clamp(20, 90);
-        let rows = self.finder.hits.len().max(1) as u16;
+        let rows = picker.items.len().max(1) as u16;
         let h = (rows + 4).min(area.height.saturating_sub(2).max(5));
         let popup = centered(area, w, h);
         Clear.render(popup, buf);
         let block = self
-            .popup_block(" Find file ")
+            .popup_block(&picker.title)
             .title_bottom(self.hint(&format!(" Enter open {} Esc close ", self.theme.glyphs.dot)));
         let inner = block.inner(popup);
         block.render(popup, buf);
-        let prompt = format!(" > {}{}", self.finder.query, self.theme.glyphs.cursor);
+        let prompt = format!(" > {}{}", picker.query, self.theme.glyphs.cursor);
         let prompt_style = Style::new().fg(self.theme.accent);
         buf.set_stringn(
             inner.x,
@@ -396,27 +447,26 @@ impl App {
             height: inner.height.saturating_sub(2),
             ..inner
         };
-        if self.finder.hits.is_empty() {
+        if picker.items.is_empty() {
             let room = list_area.width.saturating_sub(3) as usize;
             buf.set_stringn(
                 list_area.x + 3,
                 list_area.y,
-                "No matches",
+                picker.empty,
                 room,
                 self.theme.faint(),
             );
             return;
         }
-        let items: Vec<ListItem> = self
-            .finder
-            .hits
+        let items: Vec<ListItem> = picker
+            .items
             .iter()
-            .map(|hit| {
+            .map(|(label, indices)| {
                 let mut spans = Vec::new();
                 let mut run = String::new();
                 let mut run_hit = false;
-                for (i, c) in hit.label.chars().enumerate() {
-                    let is_hit = hit.indices.binary_search(&(i as u32)).is_ok();
+                for (i, c) in label.chars().enumerate() {
+                    let is_hit = indices.binary_search(&(i as u32)).is_ok();
                     if is_hit != run_hit && !run.is_empty() {
                         spans.push(self.finder_span(std::mem::take(&mut run), run_hit));
                     }
@@ -429,7 +479,7 @@ impl App {
                 ListItem::new(Line::from(spans))
             })
             .collect();
-        let mut state = ListState::default().with_selected(Some(self.finder.selected));
+        let mut state = ListState::default().with_selected(Some(picker.selected));
         let list = List::new(items)
             .highlight_style(self.theme.selected())
             .highlight_symbol(self.theme.glyphs.collapsed);
@@ -1044,4 +1094,12 @@ fn centered(area: Rect, w: u16, h: u16) -> Rect {
         width: w,
         height: h,
     }
+}
+
+struct Picker {
+    title: String,
+    query: String,
+    items: Vec<(String, Vec<u32>)>,
+    selected: usize,
+    empty: &'static str,
 }

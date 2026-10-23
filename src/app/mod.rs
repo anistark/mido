@@ -1,14 +1,17 @@
 mod draw;
 mod editing;
 mod finder;
+mod grep;
 mod images;
 pub mod keys;
 mod outline;
+mod positions;
 mod preview;
 mod search;
 mod watch;
 
 use std::collections::HashSet;
+use std::ffi::OsString;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -33,14 +36,19 @@ use crate::render::glyphs::Glyphs;
 use crate::render::layout::{FrontMatterView, Layout, Options, image_urls, layout_with};
 use crate::render::theme::Theme;
 use crate::render::wrap::{LinkKind, width};
+use crate::text::{self, Text};
 use editing::{Prompt, Session};
 use images::Images;
 use keys::{Action, Keymap};
+pub use positions::Positions;
 pub use preview::Preview;
 use search::Match;
 use watch::FileWatcher;
 
 const TAB_CHORD: Duration = Duration::from_secs(1);
+/// Link schemes opened without asking. Anything else, and any local file that is not
+/// Markdown, goes to the system only after a yes, since the system may run it.
+const SAFE_SCHEMES: &[&str] = &["http", "https", "mailto"];
 const TICK: Duration = Duration::from_millis(100);
 
 /// Everything the config decides for the viewer.
@@ -89,17 +97,17 @@ pub enum Source {
 }
 
 impl Source {
-    pub fn read(&self) -> io::Result<String> {
+    pub fn read(&self) -> io::Result<Text> {
         match self {
-            Source::File(path) => std::fs::read_to_string(path),
+            Source::File(path) => text::read(path),
             Source::Project { project, file } => match file {
-                Some(file) => std::fs::read_to_string(project.absolute(file)),
-                None => Ok(String::new()),
+                Some(file) => text::read(&project.absolute(file)),
+                None => Ok(Text::default()),
             },
             Source::Stdin => {
-                let mut text = String::new();
-                io::stdin().read_to_string(&mut text)?;
-                Ok(text)
+                let mut bytes = Vec::new();
+                io::stdin().read_to_end(&mut bytes)?;
+                text::decode(&bytes)
             }
         }
     }
@@ -112,6 +120,7 @@ enum Mode {
     Toc,
     Search,
     Finder,
+    Grep,
     Footnote,
     Prompt(Prompt),
 }
@@ -269,14 +278,19 @@ pub struct App {
     toc: ListState,
     help_scroll: usize,
     finder: finder::Finder,
+    grep: grep::Grep,
+    grep_jump: bool,
     watcher: Option<FileWatcher>,
     images: Images,
     front_matter: FrontMatterView,
     front_matter_default: FrontMatterView,
     footnote: Option<String>,
+    opening: Option<OsString>,
     edit_request: bool,
     edit: Option<Session>,
     clipboard: Option<String>,
+    yanked: Option<(usize, usize)>,
+    positions: Option<Positions>,
     pending_source: Option<usize>,
     line_starts: Vec<usize>,
     split: bool,
@@ -356,14 +370,19 @@ impl App {
             toc: ListState::default(),
             help_scroll: 0,
             finder: finder::Finder::new(),
+            grep: grep::Grep::default(),
+            grep_jump: false,
             watcher,
             images: Images::new(),
             front_matter: settings.front_matter,
             front_matter_default: settings.front_matter,
             footnote: None,
+            opening: None,
             edit_request: false,
             edit: None,
             clipboard: None,
+            yanked: None,
+            positions: None,
             pending_source: None,
             line_starts: preview::line_starts(text),
             split: false,
@@ -409,6 +428,53 @@ impl App {
         self.paste(text);
     }
 
+    /// Keeps where each file was left in `positions`, and opens the current file there.
+    pub fn remember_positions(&mut self, positions: Positions) {
+        self.positions = Some(positions);
+        if let Some(file) = self.file.clone() {
+            self.resume(&file);
+        }
+    }
+
+    /// Records the position in the current file and writes the list out.
+    pub fn save_positions(&mut self) -> io::Result<()> {
+        self.remember_here();
+        self.positions.as_mut().map_or(Ok(()), Positions::save)
+    }
+
+    fn remember_here(&mut self) {
+        if self.pending_source.is_some() || self.layout.lines.is_empty() {
+            return;
+        }
+        let offset = if self.scroll == 0 {
+            Some(0)
+        } else {
+            self.layout.source_at(self.scroll)
+        };
+        if let (Some(positions), Some(file), Some(offset)) =
+            (&mut self.positions, &self.file, offset)
+        {
+            positions.set(file, offset);
+        }
+    }
+
+    fn resume(&mut self, file: &Path) {
+        let Some(offset) = self.positions.as_ref().and_then(|p| p.get(file)) else {
+            return;
+        };
+        self.pending_source = Some(offset);
+        self.notice.get_or_insert_with(|| {
+            format!(
+                "back where you left off, {} goes to the top",
+                self.keymap.first(Action::Top)
+            )
+        });
+    }
+
+    pub fn set_notice(&mut self, notice: String) {
+        self.notice = Some(notice);
+    }
+
     pub fn notice(&self) -> Option<&str> {
         self.notice.as_deref()
     }
@@ -434,6 +500,7 @@ impl App {
         let result = self.guarded(|app| app.event_loop(&mut terminal));
         let _ = execute!(io::stdout(), DisableMouseCapture, DisableBracketedPaste);
         ratatui::restore();
+        let _ = self.save_positions();
         result
     }
 
@@ -447,6 +514,7 @@ impl App {
                     io::stdout(),
                     crossterm::style::Print(clipboard::osc52(&text))
                 )?;
+                clipboard::copy_local(&text);
             }
             let wait = if self.awaiting_layout() {
                 Duration::from_millis(4)
@@ -619,6 +687,70 @@ impl App {
         }
     }
 
+    fn open_grep(&mut self) {
+        let Some(project) = &self.project else {
+            self.notice = Some(format!(
+                "open a folder to search its files, {} searches this one",
+                self.keymap.first(Action::Search)
+            ));
+            return;
+        };
+        self.grep.open(project);
+        self.mode = Mode::Grep;
+    }
+
+    fn key_grep(&mut self, key: KeyEvent, ctrl: bool) {
+        match key.code {
+            KeyCode::Esc => self.mode = Mode::View,
+            KeyCode::Enter => {
+                self.mode = Mode::View;
+                let Some(project) = &self.project else { return };
+                let Some(hit) = self.grep.chosen() else {
+                    return;
+                };
+                let path = project.absolute(&project.entries[hit.entry].path);
+                let offset = hit.offset;
+                if self.navigate_to(Some(path), None, false) {
+                    self.focus = Focus::Content;
+                    self.pending_source = Some(offset);
+                    self.query = self.grep.query.clone();
+                    self.matches = search::find(&self.layout, &self.query);
+                    self.current = None;
+                    self.grep_jump = true;
+                }
+            }
+            KeyCode::Down => self.grep.step(1),
+            KeyCode::Up => self.grep.step(-1),
+            KeyCode::Char('j') | KeyCode::Char('n') if ctrl => self.grep.step(1),
+            KeyCode::Char('k') | KeyCode::Char('p') if ctrl => self.grep.step(-1),
+            KeyCode::Backspace => {
+                self.grep.query.pop();
+                if let Some(project) = &self.project {
+                    self.grep.search(project);
+                }
+            }
+            KeyCode::Char(c) if !ctrl => {
+                self.grep.query.push(c);
+                if let Some(project) = &self.project {
+                    self.grep.search(project);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// After a jump from the folder search, makes the first match at or below the line the
+    /// current one, so `n` and `N` go on from there.
+    fn land_on_match(&mut self) {
+        if !std::mem::take(&mut self.grep_jump) {
+            return;
+        }
+        self.current = self.matches.iter().position(|m| m.line >= self.scroll);
+        if let Some(i) = self.current {
+            self.scroll_to(self.matches[i].line);
+        }
+    }
+
     fn title(&self) -> String {
         match (&self.project, &self.file) {
             (Some(project), Some(file)) => {
@@ -670,11 +802,11 @@ impl App {
             self.notice = Some("nothing to reload".to_string());
             return;
         };
-        match std::fs::read_to_string(&path) {
+        match text::read(&path) {
             Ok(text) => {
                 self.set_text(&text);
                 self.layout_width = 0;
-                self.notice = Some("reloaded".to_string());
+                self.notice = Some(text.notice(&self.title()).unwrap_or("reloaded".to_string()));
             }
             Err(err) => self.notice = Some(format!("reload failed: {err}")),
         }
@@ -704,10 +836,12 @@ impl App {
     }
 
     fn load_path(&mut self, path: PathBuf) -> bool {
-        match std::fs::read_to_string(&path) {
+        match text::read(&path) {
             Ok(text) => {
+                self.remember_here();
                 self.set_text(&text);
                 self.file = Some(path.clone());
+                self.notice = text.notice(&self.title());
                 self.layout = Layout::default();
                 self.layout_width = 0;
                 self.scroll = 0;
@@ -735,12 +869,22 @@ impl App {
     }
 
     fn navigate(&mut self, file: Option<PathBuf>, anchor: Option<String>) -> bool {
+        self.navigate_to(file, anchor, true)
+    }
+
+    /// Opens `file`, or stays, and goes to `anchor`, keeping the history. With `resume`, a
+    /// file opened without an anchor goes back to where it was left.
+    fn navigate_to(&mut self, file: Option<PathBuf>, anchor: Option<String>, resume: bool) -> bool {
         let here = self.visit();
         if let Some(path) = file
             && self.file.as_deref() != Some(path.as_path())
-            && !self.open_path(path)
         {
-            return false;
+            if !self.open_path(path.clone()) {
+                return false;
+            }
+            if resume && anchor.is_none() && self.edit.is_none() {
+                self.resume(&path);
+            }
         }
         self.back.push(here);
         self.forward.clear();
@@ -874,11 +1018,12 @@ impl App {
             self.navigate(None, Some(anchor.to_string()));
             return;
         }
-        if url.contains("://") || url.starts_with("mailto:") || url.starts_with("tel:") {
-            self.notice = Some(match open::that_detached(url) {
-                Ok(()) => format!("opened {url}"),
-                Err(err) => format!("cannot open {url}: {err}"),
-            });
+        if let Some(scheme) = scheme(url) {
+            if SAFE_SCHEMES.contains(&scheme.to_ascii_lowercase().as_str()) {
+                self.open_external(url.into());
+            } else {
+                self.ask_to_open(url.into());
+            }
             return;
         }
         let (path_part, anchor) = match url.split_once('#') {
@@ -906,14 +1051,24 @@ impl App {
             return;
         }
         if !is_markdown(&target, &self.extensions) {
-            self.notice = Some(match open::that_detached(&target) {
-                Ok(()) => format!("opened {}", target.display()),
-                Err(err) => format!("cannot open {}: {err}", target.display()),
-            });
+            self.ask_to_open(target.into());
             return;
         }
         let target = target.canonicalize().unwrap_or(target);
         self.navigate(Some(target), anchor);
+    }
+
+    fn ask_to_open(&mut self, target: OsString) {
+        self.opening = Some(target);
+        self.mode = Mode::Prompt(Prompt::Open);
+    }
+
+    fn open_external(&mut self, target: OsString) {
+        let name = target.to_string_lossy().into_owned();
+        self.notice = Some(match open::that_detached(&target) {
+            Ok(()) => format!("opened {name}"),
+            Err(err) => format!("cannot open {name}: {err}"),
+        });
     }
 
     fn select_link(&mut self, delta: isize) {
@@ -942,6 +1097,67 @@ impl App {
         if line < self.scroll || line >= self.scroll + self.view_height {
             self.scroll_to(line);
         }
+    }
+
+    /// Copies the selected link's target, or else a code block on screen. Pressing it again
+    /// without scrolling moves on to the next block on screen.
+    fn yank(&mut self) {
+        if let Some(link) = self.link.and_then(|i| self.layout.links.get(i)) {
+            let url = link.url.clone();
+            self.notice = Some(format!("copied {url}"));
+            self.clipboard = Some(url);
+            return;
+        }
+        let bottom = self.scroll + self.view_height;
+        let on_screen: Vec<usize> = (0..self.layout.code.len())
+            .filter(|&i| {
+                let lines = &self.layout.code[i].lines;
+                lines.start < bottom && lines.end > self.scroll
+            })
+            .collect();
+        if on_screen.is_empty() {
+            self.notice = Some(format!(
+                "no code block on screen, {} selects a link to copy",
+                self.keymap.first(Action::NextLink)
+            ));
+            return;
+        }
+        let next = match self.yanked {
+            Some((scroll, last)) if scroll == self.scroll => on_screen
+                .iter()
+                .position(|&i| i == last)
+                .map_or(0, |p| (p + 1) % on_screen.len()),
+            _ => 0,
+        };
+        let index = on_screen[next];
+        self.yanked = Some((self.scroll, index));
+        let block = &self.layout.code[index];
+        let text = block.text.trim_end_matches(['\n', '\r']).to_string();
+        let count = text.lines().count();
+        let mut notice = format!(
+            "copied {count} line{}{}",
+            if count == 1 { "" } else { "s" },
+            block
+                .lang
+                .as_ref()
+                .map(|l| format!(" of {l}"))
+                .unwrap_or_default()
+        );
+        if on_screen.len() > 1 {
+            notice.push_str(&format!(
+                ", block {} of {} on screen, {} again for the next",
+                next + 1,
+                on_screen.len(),
+                self.keymap.first(Action::Yank)
+            ));
+        }
+        self.notice = Some(notice);
+        self.clipboard = Some(text);
+    }
+
+    /// What the last copy put on the clipboard, until the event loop sends it.
+    pub fn copied(&self) -> Option<&str> {
+        self.clipboard.as_deref()
     }
 
     fn open_entry(&mut self, row: usize) -> bool {
@@ -1252,6 +1468,7 @@ impl App {
             Mode::Toc => self.key_toc(key),
             Mode::Search => self.key_search(key),
             Mode::Finder => self.key_finder(key, ctrl),
+            Mode::Grep => self.key_grep(key, ctrl),
             Mode::Footnote => {
                 self.footnote = None;
                 self.mode = Mode::View;
@@ -1329,6 +1546,8 @@ impl App {
             Action::Toc => self.open_toc(),
             Action::FocusMode => self.toggle_focus_mode(),
             Action::Finder => self.open_finder(),
+            Action::Yank => self.yank(),
+            Action::SearchFiles => self.open_grep(),
             Action::Edit => self.edit_request = true,
             Action::Editor => self.start_editing(),
             Action::Split => self.toggle_split(),
@@ -1653,6 +1872,18 @@ impl App {
         }
         self.driver = Focus::Content;
     }
+}
+
+/// The scheme of a URL like `https://…`, `mailto:…` or `tel:…`, and none for a path.
+fn scheme(url: &str) -> Option<&str> {
+    let (scheme, rest) = url.split_once(':')?;
+    let valid = scheme.len() > 1
+        && scheme.starts_with(|c: char| c.is_ascii_alphabetic())
+        && scheme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'));
+    let known = rest.starts_with("//") || ["mailto", "tel"].contains(&scheme);
+    (valid && known).then_some(scheme)
 }
 
 fn wiki_key(text: &str) -> String {

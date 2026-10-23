@@ -812,3 +812,182 @@ fn the_status_bar_names_where_the_selected_link_goes() {
     let status = screen(&mut app, &mut terminal);
     assert!(!status.lines().last().unwrap().contains("Notes"));
 }
+
+#[test]
+fn links_outside_markdown_ask_before_the_system_opens_them() {
+    let dir = tempfile::tempdir().unwrap();
+    let page = dir.path().join("page.md");
+    std::fs::write(
+        &page,
+        "Run [setup](setup.command) or [the app](vscode://x/y).\n",
+    )
+    .unwrap();
+    std::fs::write(dir.path().join("setup.command"), "echo hi\n").unwrap();
+    let text = std::fs::read_to_string(&page).unwrap();
+    let mut app = App::new(Source::File(page), &text, None);
+    let mut terminal = Terminal::new(TestBackend::new(100, 12)).unwrap();
+    screen(&mut app, &mut terminal);
+
+    press(&mut app, KeyCode::Char(']'));
+    press(&mut app, KeyCode::Enter);
+    let out = screen(&mut app, &mut terminal);
+    assert!(out.contains("Outside mido"), "{out}");
+    assert!(out.contains("setup.command with the system?"), "{out}");
+    press(&mut app, KeyCode::Esc);
+    let out = screen(&mut app, &mut terminal);
+    assert!(
+        !out.contains("Outside mido") && !out.contains("opened"),
+        "{out}"
+    );
+
+    press(&mut app, KeyCode::Char(']'));
+    press(&mut app, KeyCode::Enter);
+    let out = screen(&mut app, &mut terminal);
+    assert!(out.contains("Open vscode://x/y with the system?"), "{out}");
+    press(&mut app, KeyCode::Char('n'));
+    assert!(!screen(&mut app, &mut terminal).contains("Outside mido"));
+}
+
+#[test]
+fn y_copies_the_selected_link_or_the_code_blocks_on_screen() {
+    let text = "Intro with [a link](https://example.com/x).\n\n```sh\ncargo install mido\n```\n\n```\none\ntwo\n```\n";
+    let mut app = App::new(Source::Stdin, text, None);
+    let mut terminal = Terminal::new(TestBackend::new(80, 20)).unwrap();
+    screen(&mut app, &mut terminal);
+
+    press(&mut app, KeyCode::Char('y'));
+    assert_eq!(app.copied(), Some("cargo install mido"));
+    let out = screen(&mut app, &mut terminal);
+    assert!(
+        out.contains("copied 1 line of sh, block 1 of 2 on screen"),
+        "{out}"
+    );
+    press(&mut app, KeyCode::Char('y'));
+    assert_eq!(app.copied(), Some("one\ntwo"));
+    press(&mut app, KeyCode::Char('y'));
+    assert_eq!(app.copied(), Some("cargo install mido"));
+
+    press(&mut app, KeyCode::Char(']'));
+    press(&mut app, KeyCode::Char('y'));
+    assert_eq!(app.copied(), Some("https://example.com/x"));
+
+    let mut plain = App::new(Source::Stdin, "No code here.\n", None);
+    screen(&mut plain, &mut terminal);
+    press(&mut plain, KeyCode::Char('y'));
+    assert!(plain.copied().is_none());
+    assert!(screen(&mut plain, &mut terminal).contains("no code block on screen"));
+}
+
+#[test]
+fn files_open_again_where_they_were_left() {
+    let dir = project_fixture();
+    let store = dir.path().join("cache/positions");
+    let mut app = open_project(&dir);
+    app.remember_positions(mido::app::Positions::load(store.clone()));
+    let mut terminal = Terminal::new(TestBackend::new(140, 30)).unwrap();
+    screen(&mut app, &mut terminal);
+    for _ in 0..21 {
+        press(&mut app, KeyCode::Char('j'));
+    }
+    let top = content_line(&screen(&mut app, &mut terminal), 0);
+    assert!(top.contains("Filler"), "{top}");
+    app.save_positions().unwrap();
+
+    let mut again = open_project(&dir);
+    again.remember_positions(mido::app::Positions::load(store.clone()));
+    let out = screen(&mut again, &mut terminal);
+    assert_eq!(content_line(&out, 0), top, "{out}");
+    assert!(out.contains("back where you left off"), "{out}");
+
+    again.key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
+    for c in "notes".chars() {
+        press(&mut again, KeyCode::Char(c));
+    }
+    press(&mut again, KeyCode::Enter);
+    screen(&mut again, &mut terminal);
+    again.key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
+    for c in "readme".chars() {
+        press(&mut again, KeyCode::Char(c));
+    }
+    press(&mut again, KeyCode::Enter);
+    let out = screen(&mut again, &mut terminal);
+    assert_eq!(
+        content_line(&out, 0),
+        top,
+        "opening it from the finder resumes too:\n{out}"
+    );
+
+    press(&mut again, KeyCode::Char('g'));
+    screen(&mut again, &mut terminal);
+    again.save_positions().unwrap();
+    let mut fresh = open_project(&dir);
+    fresh.remember_positions(mido::app::Positions::load(store));
+    let out = screen(&mut fresh, &mut terminal);
+    assert!(content_line(&out, 0).contains("Home"), "{out}");
+    assert!(!out.contains("back where you left off"));
+}
+
+#[test]
+fn folder_search_finds_lines_in_every_file_and_jumps_to_them() {
+    let dir = project_fixture();
+    let mut app = open_project(&dir);
+    let mut terminal = Terminal::new(TestBackend::new(140, 30)).unwrap();
+    screen(&mut app, &mut terminal);
+    press(&mut app, KeyCode::Char('F'));
+    let out = screen(&mut app, &mut terminal);
+    assert!(
+        out.contains("Search files") && out.contains("Type to search"),
+        "{out}"
+    );
+    for c in "steps go".chars() {
+        press(&mut app, KeyCode::Char(c));
+    }
+    let out = screen(&mut app, &mut terminal);
+    assert!(out.contains("1 match in 1 file"), "{out}");
+    assert!(out.contains("guide/install.md:"), "{out}");
+    insta::assert_snapshot!("search_files", out);
+    press(&mut app, KeyCode::Enter);
+    let out = screen(&mut app, &mut terminal);
+    assert!(app.current_file().unwrap().ends_with("install.md"), "{out}");
+    assert!(out.contains("Steps go here"), "{out}");
+    press(&mut app, KeyCode::Char('H'));
+    assert!(app.current_file().unwrap().ends_with("README.md"));
+
+    let mut single = App::new(Source::Stdin, "# One\n", None);
+    screen(&mut single, &mut terminal);
+    press(&mut single, KeyCode::Char('F'));
+    assert!(screen(&mut single, &mut terminal).contains("open a folder to search"));
+}
+
+#[test]
+fn files_that_are_not_utf8_open_with_a_notice() {
+    let dir = project_fixture();
+    std::fs::write(
+        dir.path().join("docs/latin1.md"),
+        b"# Caf\xe9\n\nOld text.\n",
+    )
+    .unwrap();
+    let mut utf16 = vec![0xff, 0xfe];
+    utf16.extend(
+        "# Wide\r\n\r\nFrom Windows.\r\n"
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes),
+    );
+    std::fs::write(dir.path().join("docs/wide.md"), utf16).unwrap();
+    let mut app = open_project(&dir);
+    let mut terminal = Terminal::new(TestBackend::new(140, 30)).unwrap();
+    screen(&mut app, &mut terminal);
+    for (name, expect, notice) in [
+        ("latin1", "Caf\u{fffd}", "not valid UTF-8"),
+        ("wide", "Wide", "is UTF-16"),
+    ] {
+        app.key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
+        for c in name.chars() {
+            press(&mut app, KeyCode::Char(c));
+        }
+        press(&mut app, KeyCode::Enter);
+        let out = screen(&mut app, &mut terminal);
+        assert!(content_line(&out, 0).contains(expect), "{out}");
+        assert!(out.contains(notice), "{out}");
+    }
+}

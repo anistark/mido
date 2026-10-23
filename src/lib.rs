@@ -4,6 +4,7 @@ pub mod config;
 pub mod docs;
 pub mod edit;
 pub mod project;
+pub mod text;
 pub mod themes;
 
 pub use mido_core::markdown;

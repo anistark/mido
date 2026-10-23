@@ -7,10 +7,13 @@ use pulldown_cmark::{
 
 use super::document::*;
 
+/// Parses Markdown into a `Document`. A leading byte order mark is skipped, so it does not
+/// hide a first heading or front matter, and every offset still counts it.
 pub fn parse(text: &str) -> Document {
+    let bom = if text.starts_with('\u{feff}') { 3 } else { 0 };
     let mut builder = Builder::new();
-    for (event, range) in Parser::new_ext(text, options()).into_offset_iter() {
-        builder.event(event, range);
+    for (event, range) in Parser::new_ext(&text[bom..], options()).into_offset_iter() {
+        builder.event(event, range.start + bom..range.end + bom);
     }
     builder.finish()
 }
@@ -571,6 +574,15 @@ mod tests {
 
     fn text(s: &str) -> Inline {
         Inline::Text(s.to_string())
+    }
+
+    #[test]
+    fn a_byte_order_mark_is_skipped_and_offsets_count_it() {
+        let doc = parse("\u{feff}---\ntitle: x\n---\n# Hi\n\ntext\n");
+        assert!(doc.front_matter.is_some());
+        let heading = &doc.blocks[0];
+        assert!(matches!(heading.kind, BlockKind::Heading { level: 1, .. }));
+        assert_eq!(heading.span.start, "\u{feff}---\ntitle: x\n---\n".len());
     }
 
     #[test]

@@ -25,6 +25,9 @@ pub(super) enum Prompt {
     Overwrite { leave: bool },
     /// Quitting mido with unsaved changes.
     Quit,
+    /// Handing a link to the system: a local file that is not Markdown, or a URL scheme
+    /// that is not on the web.
+    Open,
 }
 
 #[derive(Debug, Default)]
@@ -359,7 +362,16 @@ impl App {
                 }
             }
             (Prompt::Quit, 'd' | 'n') => self.quit = true,
-            (_, 'c') => self.mode = Mode::View,
+            (Prompt::Open, 'o' | 'y') => {
+                self.mode = Mode::View;
+                if let Some(target) = self.opening.take() {
+                    self.open_external(target);
+                }
+            }
+            (Prompt::Open, 'n') | (_, 'c') => {
+                self.opening = None;
+                self.mode = Mode::View;
+            }
             _ => {}
         }
     }
@@ -379,6 +391,16 @@ impl App {
             Prompt::Quit => (
                 format!("{name} has unsaved changes."),
                 format!("s save and quit {dot} d quit without saving {dot} Esc cancel"),
+            ),
+            Prompt::Open => (
+                format!(
+                    "Open {} with the system? It may run a program.",
+                    self.opening
+                        .as_ref()
+                        .map(|t| t.to_string_lossy().into_owned())
+                        .unwrap_or_default()
+                ),
+                format!("o open {dot} Esc cancel"),
             ),
         }
     }

@@ -58,6 +58,7 @@ struct File {
     extensions: Option<Vec<String>>,
     split: Option<Split>,
     split_ratio: Option<u16>,
+    remember_position: Option<bool>,
     #[serde(default)]
     keys: BTreeMap<String, Keys>,
 }
@@ -98,9 +99,14 @@ pub struct Config {
     pub extensions: Vec<String>,
     pub split: Split,
     pub split_ratio: u16,
+    pub remember_position: bool,
     pub keys: BTreeMap<String, Vec<String>>,
     pub files: Vec<PathBuf>,
     pub themes_dir: Option<PathBuf>,
+    /// What a `.mido.toml` set that this version cannot use, skipped rather than fatal.
+    pub warnings: Vec<String>,
+    /// The themes before a `.mido.toml` changed them, to fall back on if its theme fails.
+    user_themes: Option<(Option<ThemeRef>, ThemeRef, ThemeRef)>,
 }
 
 impl Default for Config {
@@ -117,9 +123,12 @@ impl Default for Config {
             extensions: default_extensions(),
             split: Split::default(),
             split_ratio: DEFAULT_SPLIT_RATIO,
+            remember_position: true,
             keys: BTreeMap::new(),
             files: Vec::new(),
             themes_dir: None,
+            warnings: Vec::new(),
+            user_themes: None,
         }
     }
 }
@@ -142,6 +151,9 @@ pub fn config_dir() -> Option<PathBuf> {
 
 impl Config {
     /// Reads the user config (or `explicit`), then the nearest `.mido.toml` at or above `start`.
+    /// A problem in the user config is an error. The `.mido.toml` arrives with whatever folder
+    /// is opened, maybe written for a newer mido, so a setting in it that does not work here is
+    /// skipped with a warning and the rest still applies.
     pub fn load(explicit: Option<&Path>, start: &Path) -> Result<Self> {
         let dir = config_dir();
         let mut config = Self {
@@ -163,7 +175,7 @@ impl Config {
         if let Some(project) = find_project_file(start)
             && user.as_ref().is_none_or(|u| !same_file(u, &project))
         {
-            config.apply(&project)?;
+            config.apply_project(&project);
         }
         Ok(config)
     }
@@ -177,9 +189,115 @@ impl Config {
         Ok(())
     }
 
+    fn apply_project(&mut self, path: &Path) {
+        match std::fs::read_to_string(path) {
+            Ok(text) => {
+                let dir = path.parent().unwrap_or(Path::new(""));
+                self.merge_project(&text, dir, path);
+                self.files.push(path.to_path_buf());
+            }
+            Err(err) => self.warnings.push(format!(
+                "{}: skipped, cannot read it: {err}",
+                path.display()
+            )),
+        }
+    }
+
+    /// Merges a `.mido.toml` one setting at a time, skipping each one that fails with a
+    /// warning that names it.
+    pub fn merge_project(&mut self, text: &str, dir: &Path, path: &Path) {
+        let table: toml::Table = match toml::from_str(text) {
+            Ok(table) => table,
+            Err(err) => {
+                let line = err
+                    .span()
+                    .map(|span| format!(" on line {}", text[..span.start].lines().count().max(1)))
+                    .unwrap_or_default();
+                let what = format!("the whole file{line}");
+                return self.warn(path, &what, err.message());
+            }
+        };
+        self.user_themes.get_or_insert_with(|| {
+            (
+                self.theme.clone(),
+                self.dark_theme.clone(),
+                self.light_theme.clone(),
+            )
+        });
+        let mut skipped = Vec::new();
+        for (key, value) in table {
+            match (key.as_str(), value) {
+                ("keys", toml::Value::Table(keys)) => {
+                    for (action, binding) in keys {
+                        let one = toml::Table::from_iter([(action.clone(), binding)]);
+                        let one = toml::Table::from_iter([("keys".to_string(), one.into())]);
+                        let mut trial = self.clone();
+                        let result = trial.merge_table(one, dir).and_then(|()| {
+                            let keys = BTreeMap::from_iter([(
+                                action.clone(),
+                                trial.keys[&action].clone(),
+                            )]);
+                            crate::app::keys::Keymap::with_overrides(&keys)
+                                .map(|_| ())
+                                .map_err(anyhow::Error::msg)
+                        });
+                        match result {
+                            Ok(()) => self.keys = trial.keys,
+                            Err(err) => skipped.push((format!("[keys] {action}"), err.to_string())),
+                        }
+                    }
+                }
+                (_, value) => {
+                    let one = toml::Table::from_iter([(key.clone(), value)]);
+                    if let Err(err) = self.merge_table(one, dir) {
+                        skipped.push((format!("`{key}`"), err.to_string()));
+                    }
+                }
+            }
+        }
+        for (what, err) in skipped {
+            self.warn(path, &what, &err);
+        }
+    }
+
+    fn warn(&mut self, path: &Path, what: &str, err: &str) {
+        let err = match err.split_once(", expected") {
+            Some((head, _)) if head.starts_with("unknown field") => {
+                "this version of mido has no such setting"
+            }
+            _ => err,
+        };
+        self.warnings
+            .push(format!("{}: skipped {what}, {err}", path.display()));
+    }
+
+    /// The same settings with the themes a `.mido.toml` set put back as they were, when the
+    /// project file changed them.
+    pub fn without_project_themes(&self) -> Option<Config> {
+        let (theme, dark, light) = self.user_themes.clone()?;
+        let unchanged = theme == self.theme && dark == self.dark_theme && light == self.light_theme;
+        (!unchanged).then(|| Config {
+            theme,
+            dark_theme: dark,
+            light_theme: light,
+            ..self.clone()
+        })
+    }
+
     pub fn merge(&mut self, text: &str, dir: &Path) -> Result<()> {
         let file: File =
             toml::from_str(text).map_err(|e| anyhow::anyhow!(e.message().to_string()))?;
+        self.merge_file(file, dir)
+    }
+
+    fn merge_table(&mut self, table: toml::Table, dir: &Path) -> Result<()> {
+        let file: File = toml::Value::Table(table)
+            .try_into()
+            .map_err(|e: toml::de::Error| anyhow::anyhow!(e.message().to_string()))?;
+        self.merge_file(file, dir)
+    }
+
+    fn merge_file(&mut self, file: File, dir: &Path) -> Result<()> {
         let at = |value: String| ThemeRef {
             value,
             dir: dir.to_path_buf(),
@@ -219,6 +337,9 @@ impl Config {
                 bail!("split_ratio must be between 20 and 80, got {ratio}");
             }
             self.split_ratio = ratio;
+        }
+        if let Some(remember) = file.remember_position {
+            self.remember_position = remember;
         }
         if let Some(view) = file.front_matter {
             self.front_matter = match view {
@@ -438,6 +559,7 @@ front_matter = "hidden"
 extensions = [".md", "TXT"]
 split = "stacked"
 split_ratio = 60
+remember_position = false
 
 [keys]
 quit = "x"
@@ -461,6 +583,7 @@ scroll_down = ["j", "ctrl-n"]
         assert_eq!(config.extensions, ["md", "txt"]);
         assert_eq!(config.split, Split::Stacked);
         assert_eq!(config.split_ratio, 60);
+        assert!(!config.remember_position);
         assert_eq!(config.keys["quit"], ["x"]);
         assert_eq!(config.keys["scroll_down"], ["j", "ctrl-n"]);
     }
@@ -488,6 +611,52 @@ scroll_down = ["j", "ctrl-n"]
         assert!(err("extensions = []").contains("at least one"));
         assert!(err("split_ratio = 90").contains("between 20 and 80"));
         assert!(err("split = \"sideways\"").contains("unknown variant"));
+    }
+
+    #[test]
+    fn a_project_file_skips_what_it_cannot_use_and_keeps_the_rest() {
+        let mut config = merged("theme = \"nord\"\n[keys]\nhelp = \"F1\"").unwrap();
+        let path = Path::new("/project/.mido.toml");
+        config.merge_project(
+            r#"
+width = 72
+from_the_future = true
+split = "tabs"
+gutter = 40
+[keys]
+quit = "x"
+teleport = "t"
+"#,
+            Path::new("/project"),
+            path,
+        );
+        assert_eq!(config.width, Some(72));
+        assert_eq!(config.split, Split::SideBySide);
+        assert_eq!(config.gutter, DEFAULT_GUTTER);
+        assert_eq!(config.keys["quit"], ["x"]);
+        assert_eq!(config.keys["help"], ["F1"]);
+        assert!(!config.keys.contains_key("teleport"));
+        let warnings = config.warnings.join("\n");
+        for part in [
+            "skipped `from_the_future`, this version of mido has no such setting",
+            "skipped `split`, unknown variant `tabs`",
+            "skipped `gutter`, gutter must be at most 16",
+            "skipped [keys] teleport, unknown action `teleport`",
+        ] {
+            assert!(warnings.contains(part), "{part} in {warnings}");
+        }
+        assert!(warnings.starts_with("/project/.mido.toml: "));
+        assert!(config.without_project_themes().is_none());
+
+        config.merge_project("theme = \"missing\"", Path::new("/project"), path);
+        let fallback = config.without_project_themes().unwrap();
+        assert_eq!(fallback.theme.unwrap().value, "nord");
+        assert_eq!(fallback.width, Some(72));
+
+        let mut broken = Config::default();
+        broken.merge_project("width = 72\ntheme = \n", Path::new("/p"), path);
+        assert_eq!(broken.width, None);
+        assert!(broken.warnings[0].contains("skipped the whole file on line 2"));
     }
 
     #[test]

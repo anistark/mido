@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::Range;
 
 use ratatui_core::style::{Modifier, Style};
 use ratatui_core::text::{Line, Span};
@@ -56,6 +57,15 @@ pub struct Layout {
     pub headings: Vec<Heading>,
     pub links: Vec<Link>,
     pub images: Vec<ImageSlot>,
+    pub code: Vec<CodeBlock>,
+}
+
+/// A code block or diagram on the page: the lines it takes and its source, for copying.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CodeBlock {
+    pub lines: Range<usize>,
+    pub lang: Option<String>,
+    pub text: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -654,6 +664,16 @@ impl Renderer<'_> {
     }
 
     fn code_block(&mut self, lang: Option<&str>, code: &str, line_starts: &[usize]) {
+        let start = self.out.lines.len();
+        self.code_lines(lang, code, line_starts);
+        self.out.code.push(CodeBlock {
+            lines: start..self.out.lines.len(),
+            lang: lang.map(str::to_string),
+            text: code.to_string(),
+        });
+    }
+
+    fn code_lines(&mut self, lang: Option<&str>, code: &str, line_starts: &[usize]) {
         let code = code.replace('\t', "    ");
         let inner = self.avail().saturating_sub(2).max(1);
         if lang == Some("mermaid")

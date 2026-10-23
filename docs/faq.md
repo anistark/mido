@@ -28,6 +28,14 @@ Yes. Pick one of the [built-in themes](themes.md#built-in-themes) with `--theme`
 
 Without `-p`, output that is not a terminal is written as plain text, so `mido file.md > out.txt` never leaks escape codes. Add `-p` to keep the styling, for example `mido -p file.md | less -R`.
 
+## How do I copy text?
+
+`y` copies a code block on the screen, or the selected link. To select any text with the mouse, hold `Shift` while you drag, or `Option` in iTerm2, since mido uses the mouse for scrolling and links. See [copying](navigation.md#copying).
+
+## What about files that are not UTF-8?
+
+A UTF-16 file with a byte order mark, as Windows tools write, reads and saves as UTF-16. A file in another encoding opens with the bytes that are not UTF-8 shown as `�`, and the editor will not open it, so saving cannot change bytes you never touched. A file with NUL bytes is taken for binary and refused.
+
 ## Can I edit the file?
 
 Yes. `e` opens it in mido's own [editor](editing.md), which knows enough Markdown to continue lists and toggle tasks, and `Ctrl-s` saves. `E` opens the file in `$VISUAL` or `$EDITOR` instead and reloads it when you come back.
