@@ -2,6 +2,8 @@ use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+use crate::text::{self, Encoding};
+
 const BOM: &str = "\u{feff}";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,6 +29,7 @@ pub struct Format {
     pub trailing_newline: bool,
     /// Both line endings were found. The file is saved with the more common one.
     pub mixed: bool,
+    pub encoding: Encoding,
 }
 
 impl Default for Format {
@@ -36,6 +39,7 @@ impl Default for Format {
             bom: false,
             trailing_newline: true,
             mixed: false,
+            encoding: Encoding::Utf8,
         }
     }
 }
@@ -72,6 +76,7 @@ pub fn decode(text: &str) -> (Format, Vec<String>) {
         bom,
         trailing_newline,
         mixed: crlf > 0 && lf > 0,
+        encoding: Encoding::Utf8,
     };
     (format, lines)
 }
@@ -98,13 +103,20 @@ pub struct EditFile {
 }
 
 impl EditFile {
-    /// Reads the file, or starts an empty one when the path does not exist yet.
+    /// Reads the file, or starts an empty one when the path does not exist yet. A file that
+    /// does not decode cleanly is refused, since saving it would change bytes nobody edited.
     pub fn open(path: &Path) -> io::Result<(Self, Vec<String>)> {
         match fs::read(path) {
             Ok(bytes) => {
-                let text = String::from_utf8(bytes.clone())
-                    .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "not UTF-8 text"))?;
-                let (format, lines) = decode(&text);
+                let text = text::decode(&bytes)?;
+                if text.lossy {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "not valid UTF-8, so saving could lose bytes",
+                    ));
+                }
+                let (mut format, lines) = decode(&text);
+                format.encoding = text.encoding;
                 let file = Self {
                     path: path.to_path_buf(),
                     format,
@@ -137,11 +149,11 @@ impl EditFile {
     }
 
     pub fn save(&mut self, lines: &[String]) -> io::Result<()> {
-        let text = encode(self.format, lines);
+        let bytes = text::encode(&encode(self.format, lines), self.format.encoding);
         let target = fs::canonicalize(&self.path).unwrap_or_else(|_| self.path.clone());
-        write_atomic(&target, text.as_bytes())?;
+        write_atomic(&target, &bytes)?;
         self.format.mixed = false;
-        self.disk = Some(text.into_bytes());
+        self.disk = Some(bytes);
         Ok(())
     }
 
@@ -289,5 +301,24 @@ mod tests {
                 .is_symlink()
         );
         assert_eq!(fs::read_to_string(&target).unwrap(), "b\n");
+    }
+
+    #[test]
+    fn utf16_saves_back_byte_for_byte_and_invalid_utf8_is_not_edited() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wide.md");
+        let bytes = text::encode("\u{feff}# Wide\r\n\r\nCafé\r\n", Encoding::Utf16Le);
+        fs::write(&path, &bytes).unwrap();
+        let (mut file, lines) = EditFile::open(&path).unwrap();
+        assert_eq!(file.format.encoding, Encoding::Utf16Le);
+        assert_eq!(lines, ["# Wide", "", "Café"]);
+        file.save(&lines).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        assert!(!file.changed_on_disk());
+
+        let latin1 = dir.path().join("latin1.md");
+        fs::write(&latin1, b"caf\xe9\n").unwrap();
+        let err = EditFile::open(&latin1).unwrap_err();
+        assert!(err.to_string().contains("not valid UTF-8"));
     }
 }

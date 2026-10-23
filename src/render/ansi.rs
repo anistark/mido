@@ -10,7 +10,9 @@ use unicode_width::UnicodeWidthChar;
 use super::layout::Link;
 
 /// Writes the laid-out lines. With `color`, links whose target `url` resolves are wrapped in
-/// OSC 8 hyperlinks, so terminals that support them make the text clickable.
+/// OSC 8 hyperlinks, so terminals that support them make the text clickable. Control
+/// characters in the text and the URLs are dropped, so a document cannot send the terminal
+/// escape sequences of its own.
 pub fn write(
     lines: &[Line<'_>],
     links: &[Link],
@@ -23,7 +25,10 @@ pub fn write(
             links
                 .iter()
                 .filter(|l| l.line == number)
-                .filter_map(|l| Some((usize::from(l.start), usize::from(l.end), url(l)?)))
+                .filter_map(|l| {
+                    let url: String = url(l)?.chars().filter(|c| !c.is_control()).collect();
+                    Some((usize::from(l.start), usize::from(l.end), url))
+                })
                 .collect()
         } else {
             Vec::new()
@@ -34,7 +39,7 @@ pub fn write(
             if color {
                 begin(out, span.style)?;
             }
-            for c in span.content.chars() {
+            for c in span.content.chars().filter(|c| !c.is_control()) {
                 if open.is_none()
                     && let Some(i) = links
                         .iter()
@@ -113,5 +118,27 @@ mod tests {
         assert!(!text.contains("notes.md\x1b\\"));
         let plain = print("See [the site](https://x.y).", false);
         assert!(!plain.contains("\x1b]8"));
+    }
+
+    #[test]
+    fn escape_sequences_in_the_document_never_reach_the_terminal() {
+        let text = "title \x1b]0;owned\x07, clipboard \x1b]52;c;aGk=\x07 and \u{9b}2J\n\n\
+                    ```\ncode \x1b[2J\n```\n";
+        for color in [true, false] {
+            let out = print(text, color);
+            for sequence in ["\x1b]0;", "\x1b]52;", "\x1b[2J", "\x07", "\u{9b}"] {
+                assert!(!out.contains(sequence), "{sequence:?} in {out:?}");
+            }
+            assert!(out.contains("clipboard"));
+        }
+        let out = layout(&parse("[x](https://x.y)"), &Theme::dark(), 60);
+        let mut bytes = Vec::new();
+        write(&out.lines, &out.links, &mut bytes, true, |_| {
+            Some("https://x.y\x1b\\\x1b]52;c;aGk=\x07".to_string())
+        })
+        .unwrap();
+        let out = String::from_utf8(bytes).unwrap();
+        assert!(!out.contains("\x1b]52;"), "{out:?}");
+        assert_eq!(out.matches("\x1b]8;;").count(), 2, "{out:?}");
     }
 }

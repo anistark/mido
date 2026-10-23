@@ -50,12 +50,14 @@ The tables below are generated from the keymap in the source, so they cannot dri
 | `Enter`, click | Follow the selected link or open a footnote |
 | `H` / `L` | Back / forward through visited pages |
 | `Ctrl-p` | Find a file in the folder |
+| `y` | Copy the selected link or a code block |
 
 ## Search and editing
 
 | Key | Action |
 | --- | --- |
 | `/` | Search, Enter to keep, Esc to cancel |
+| `F` | Search every file in the folder |
 | `n` / `N` | Next / previous match |
 | `e` | Edit the file in mido |
 | `v` | Edit with a live preview |
@@ -134,6 +136,8 @@ The editor's actions have keys of their own, apart from the reader's, so `ctrl-f
 | `back` | `H` | Back through visited pages |
 | `forward` | `L` | Forward through visited pages |
 | `finder` | `Ctrl-p` | Find a file in the folder |
+| `yank` | `y` | Copy the selected link, or a code block on screen |
+| `search_files` | `F` | Search every file in the folder |
 | `search` | `/` | Search |
 | `next_match` | `n` | Next match |
 | `prev_match` | `N` | Previous match |

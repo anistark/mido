@@ -39,6 +39,7 @@ front_matter = "collapsed"   # collapsed, expanded or hidden
 extensions = ["md", "markdown", "mdown", "mkd", "mdx"]
 split = "side-by-side"       # side-by-side or stacked, for the editor and its preview
 split_ratio = 50             # the editor's share of the split, 20 to 80
+remember_position = true     # open a file again where you left it
 
 [keys]
 quit = ["q", "ctrl-q"]
@@ -57,9 +58,12 @@ quit = ["q", "ctrl-q"]
 | `extensions` | `md`, `markdown`, `mdown`, `mkd`, `mdx` | File extensions that count as Markdown in the files panel, the finder, the watcher and link following |
 | `split` | `side-by-side` | How the [editor and its live preview](editing.md#live-preview) share the screen: `side-by-side` or `stacked`, the editor above |
 | `split_ratio` | `50` | The editor's share of the split as a percentage, from 20 to 80. `<` and `>` change it while you work |
+| `remember_position` | `true` | Open a file again at the place you left it. Positions are kept for the last 500 files in `positions` in the user cache folder, and `g` goes to the top |
 | `[keys]` | the keymap | Rebind actions, see [remapping](keys.md#remapping) |
 
-An unknown setting, a misspelled value or a key that does not parse stops mido with the file and the problem named, rather than being ignored.
+In your own config, an unknown setting, a misspelled value or a key that does not parse stops mido with the file and the problem named, rather than being ignored.
+
+A `.mido.toml` is read more gently, because it comes with whatever folder you open and may be written for a newer mido. A setting in it that this version cannot use, whether unknown, out of range or naming a theme you do not have, is skipped and the rest still applies. mido names each one in the status bar when it starts, and on stderr in print mode.
 
 ## Background detection
 

@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use clap::{CommandFactory, Parser};
 use clap_complete::Shell;
 use mido::app::keys::Keymap;
-use mido::app::{App, Settings, Source};
+use mido::app::{App, Positions, Settings, Source};
 use mido::cli::{BANNER, Cli};
 use mido::config::{self, Config};
 use mido::markdown::parse;
@@ -86,7 +86,7 @@ fn main() -> Result<()> {
         bail!("the editor needs a terminal");
     }
     let text = if editing && missing {
-        Ok(String::new())
+        Ok(Default::default())
     } else {
         source.read()
     };
@@ -103,17 +103,47 @@ fn main() -> Result<()> {
     })?;
 
     let interactive = io::stdout().is_terminal();
-    let theme = config
-        .resolve_theme(|| {
-            if interactive {
-                config::detect_background()
-            } else {
-                mido::render::theme::Kind::Dark
+    let detect = || {
+        if interactive {
+            config::detect_background()
+        } else {
+            mido::render::theme::Kind::Dark
+        }
+    };
+    let mut warnings = config.warnings.clone();
+    let name = match &source {
+        Source::File(path) => path.display().to_string(),
+        Source::Project { file, .. } => file
+            .as_ref()
+            .map(|f| f.display().to_string())
+            .unwrap_or_default(),
+        Source::Stdin => "stdin".to_string(),
+    };
+    let printing = cli.print || !interactive;
+    if text.lossy || !printing {
+        warnings.extend(text.notice(&name));
+    }
+    let theme = match config.resolve_theme(detect) {
+        Ok(theme) => theme,
+        Err(err) => match config.without_project_themes() {
+            Some(fallback) => {
+                let project = config.files.last().map(|f| f.display().to_string());
+                warnings.push(format!(
+                    "{}: skipped its theme, {err:#}",
+                    project.unwrap_or_default()
+                ));
+                config = fallback;
+                config.resolve_theme(detect)?
             }
-        })?
-        .with_mode(mode);
+            None => return Err(err),
+        },
+    }
+    .with_mode(mode);
 
-    if cli.print || !interactive {
+    if printing {
+        for warning in &warnings {
+            eprintln!("mido: {warning}");
+        }
         let color = cli.print && theme.mode != ColorMode::Mono;
         let doc = parse(&text);
         let options = Options {
@@ -161,6 +191,18 @@ fn main() -> Result<()> {
     };
     let mut app = App::with_settings(source, &text, settings);
     app.set_remote_images(cli.remote_images);
+    if config.remember_position
+        && !editing
+        && let Some(path) = Positions::default_path()
+    {
+        app.remember_positions(Positions::load(path));
+    }
+    if let Some(first) = warnings.first() {
+        app.set_notice(match warnings.len() {
+            1 => first.clone(),
+            n => format!("{first} (and {} more)", n - 1),
+        });
+    }
     if editing {
         app.start_editing();
     }

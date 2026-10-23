@@ -57,7 +57,8 @@ In the split the preview is the same reader on the same `Layout`, fed by `Previe
 | Path | What it owns |
 | --- | --- |
 | `src/main.rs`, `src/cli.rs` | clap entry and mode dispatch: file, folder, stdin, print, `docs`, `themes`, `new`, `completions`, `--man`. Loads the config and resolves the theme before the TUI starts |
-| `src/config.rs` | Config dir lookup, `config.toml` then the nearest `.mido.toml`, merging, theme resolution by name or path with `extends`, background detection through terminal-light |
+| `src/config.rs` | Config dir lookup, `config.toml` then the nearest `.mido.toml`, merging (strict for the user config, setting by setting with warnings for the project file), theme resolution by name or path with `extends`, background detection through terminal-light |
+| `src/text.rs` | Reading a file as text: UTF-8, UTF-16 with a byte order mark both ways, lossy UTF-8 with a flag, NUL bytes refused as binary |
 | `src/themes.rs` | `mido themes`: the list with swatches |
 | `core/markdown/` | `parse.rs` builds the tree from pulldown-cmark events, `document.rs` is the data model plus front matter fields, `slug.rs` makes GitHub-compatible anchors |
 | `core/render/layout.rs` | `Document` to styled lines at a width, with the heading, link, image and source indices |
@@ -74,10 +75,11 @@ In the split the preview is the same reader on the same `Layout`, fed by `Previe
 | `src/edit/mod.rs` | The `Editor` trait, `Command`, `Motion` and the `Look` an editor paints with |
 | `src/edit/textarea.rs` | The ratatui-textarea backend: undo steps, painting over the widget, the screen map for the mouse and scroll |
 | `src/edit/assist.rs` | Markdown assists as plain functions of lines and cursor: list and quote continuation, nesting, tasks, pairs |
-| `src/edit/file.rs`, `clipboard.rs` | Decoding and encoding a file's layout, the atomic save, OSC 52 |
+| `src/edit/file.rs`, `clipboard.rs` | Decoding and encoding a file's layout and encoding, the atomic save, OSC 52 plus the local clipboard command off SSH |
 | `core/render/source.rs` | Markdown source to styled runs per line for the editor, syntect on fenced code with a cache |
 | `src/app/keys.rs` | `Action`, the default bindings, `Keymap::with_overrides` for `[keys]`, and the rows that drive the help overlay and `docs/keys.md` |
 | `src/app/outline.rs`, `finder.rs`, `search.rs`, `watch.rs`, `images.rs` | Foldable tree for both panels, fuzzy file picker, smart-case search, file watcher, image and badge fetching with the cache |
+| `src/app/grep.rs`, `positions.rs` | Search over the source of every file in the folder, and the reading position per file kept in the user cache folder |
 | `src/project/scan.rs` | Folder walk with the ignore crate, tree order, titles, entry file |
 | `src/docs.rs`, `build.rs` | Embed `docs/*.md` for `mido docs` and generate the man page |
 
@@ -92,6 +94,7 @@ In the split the preview is the same reader on the same `Layout`, fed by `Previe
 - **The preview is driven only through `Preview`.** Opening, replacing the content, scrolling to a source line and reloading go through `App::preview`. The built-in editor is its first client, and a control socket for other editors is meant to send the same commands, so there is no second rendering path.
 - **The app talks to an editor only through `Editor` and `Command`.** Nothing outside `src/edit/textarea.rs` touches ratatui-textarea, and assists return commands instead of editing, so another backend gets them for free.
 - **Saving never loses bytes.** An unedited buffer saves byte for byte, `tests/edit.rs` checks it over every Markdown file in the repo, and a save goes through a temporary file and a rename. The buffer is never replaced while editing: a change on disk is noted and the next save asks.
+- **Nothing runs without asking.** A link goes to the system opener straight away only for `http`, `https` and `mailto`, the `SAFE_SCHEMES` in `src/app/mod.rs`. Any other scheme and any local file that is not Markdown waits on `Prompt::Open`, because the opener runs programs. Print mode drops control characters from text and link targets before writing them, so a document cannot send escape sequences. The viewer gets the same from ratatui, which skips any grapheme with a control character.
 - **Nothing reaches the network without `--remote-images`.** It is a flag only, never a config setting, because a `.mido.toml` arrives with any folder a user opens. Local images always load. Remote images and badge values are fetched only with the flag: images cached under the user cache directory with a 10 MB cap, badges with a 5 s timeout and a 64 KB cap and no disk cache.
 
 ---
@@ -194,6 +197,8 @@ Both release recipes require `main` and a clean tree.
 - **`just demo` needs VHS 0.11.0.** 0.12.0 writes no output.
 - **`.gitattributes` forces LF on every platform.** `docs/keys.md` is compared byte for byte with the keymap, and Windows checkouts used to fail on CRLF.
 - **Terminal safety is ratatui's init and restore plus a chained panic hook.** `ratatui::try_init()` installs the hook that leaves raw mode and the alternate screen on a panic, `App::run` chains one that drops mouse capture first, and the `$EDITOR` shell-out restores and re-enters the same way. Keep that pairing when adding a mode.
+- **A `.mido.toml` never stops mido.** It comes with any folder, maybe written for a newer version, so `Config::merge_project` merges it one setting and one `[keys]` entry at a time and turns each failure into a line in `Config::warnings`. A theme it names that does not resolve falls back to the user's through `without_project_themes`. The user config stays strict on purpose: a typo there should be loud.
+- **Tests must not touch the reading positions.** `App` only remembers positions after `remember_positions`, which `main` calls with the cache path. Screen tests that need it pass a `Positions` loaded from a temporary folder.
 - **Tests must not read the developer's config.** The binary tests in `tests/docs.rs` run mido for real, so a personal `config.toml` could change what they print. Set `MIDO_CONFIG_DIR` to an empty folder when a test spawns the binary, and build `App` through `Settings::default()` in screen tests.
 - **Background detection writes to the terminal.** `config::detect_background` sends an OSC 11 query and reads the answer in raw mode, so it runs once in `main` before `ratatui::try_init`, and only when stdin and stdout are both a tty. Never call it from inside the TUI.
 - **`mido themes`, `mido docs`, `mido new` and `mido completions` are names, not subcommands.** A local path with that name wins over them. `new` and `completions` take their argument from the second positional, `Cli::file`.

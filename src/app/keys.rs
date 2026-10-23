@@ -26,6 +26,8 @@ pub enum Action {
     Back,
     Forward,
     Finder,
+    Yank,
+    SearchFiles,
     Search,
     NextMatch,
     PrevMatch,
@@ -155,6 +157,18 @@ pub const ACTIONS: &[(Action, &str, &[&str], &str)] = &[
         "finder",
         &["ctrl-p"],
         "Find a file in the folder",
+    ),
+    (
+        Action::Yank,
+        "yank",
+        &["y"],
+        "Copy the selected link, or a code block on screen",
+    ),
+    (
+        Action::SearchFiles,
+        "search_files",
+        &["F"],
+        "Search every file in the folder",
     ),
     (Action::Search, "search", &["/"], "Search"),
     (Action::NextMatch, "next_match", &["n"], "Next match"),
@@ -311,12 +325,14 @@ const SECTIONS: &[(&str, &[Row])] = &[
                 "Back / forward through visited pages",
             ),
             Row::One(Action::Finder, "Find a file in the folder"),
+            Row::One(Action::Yank, "Copy the selected link or a code block"),
         ],
     ),
     (
         "Search and editing",
         &[
             Row::One(Action::Search, "Search, Enter to keep, Esc to cancel"),
+            Row::One(Action::SearchFiles, "Search every file in the folder"),
             Row::Pair(
                 Action::NextMatch,
                 Action::PrevMatch,
